@@ -1,18 +1,33 @@
 -- =============================================================================
+-- ORGANIZATIONS
+-- =============================================================================
+
+CREATE TABLE organizations (
+    id         SERIAL PRIMARY KEY,
+    name       VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX idx_organizations_name ON organizations(name);
+
+-- =============================================================================
 -- USER MANAGEMENT
 -- =============================================================================
 
 CREATE TABLE users (
-    id          SERIAL PRIMARY KEY,
-    username    VARCHAR(100) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    email       VARCHAR(100),
-    role        VARCHAR(50) DEFAULT 'support',  -- support, developer, admin
-    created_at  TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at  TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    id              SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id),
+    username        VARCHAR(100) UNIQUE NOT NULL,
+    password_hash   VARCHAR(255) NOT NULL,
+    email           VARCHAR(100),
+    role            VARCHAR(50) DEFAULT 'support',  -- support, developer, admin
+    created_at      TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at      TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
-CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_username        ON users(username);
+CREATE INDEX idx_users_organization_id ON users(organization_id);
 
 -- =============================================================================
 -- DEVICE MANAGEMENT

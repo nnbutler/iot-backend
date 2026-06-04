@@ -11,6 +11,7 @@
 1. [Overview](#overview)
 2. [Entity Relationship Summary](#entity-relationship-summary)
 3. [Tables](#tables)
+   - [organizations](#organizations)
    - [users](#users)
    - [devices](#devices)
    - [error_types](#error_types)
@@ -39,8 +40,8 @@ The database serves three purposes:
 ## Entity Relationship Summary
 
 ```
-users
-  (no FK relations — auth is separate from device ownership)
+organizations
+  └── users (organization_id → organizations.id)
 
 devices ──────────────────────────────────────────┐
   │                                               │
@@ -69,13 +70,29 @@ repair_actions
 
 ---
 
-### `users`
+### `organizations`
 
-Stores dashboard and support staff accounts. Phase 1 uses hardcoded credentials; this table is the foundation for proper RBAC in Phase 2.
+Top-level tenant grouping. Every user belongs to one organization. Designed for the current single-tenant use case but structured to support multiple tenants later.
 
 | Column | Type | Nullable | Default | Description |
 |---|---|---|---|---|
 | `id` | SERIAL | NOT NULL | auto | Primary key |
+| `name` | VARCHAR(255) | NOT NULL | — | Unique organization name |
+| `created_at` | TIMESTAMPTZ | NOT NULL | `NOW()` | Record creation time |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | `NOW()` | Last modification time |
+
+**Indexes:** `idx_organizations_name` on `name`
+
+---
+
+### `users`
+
+Stores dashboard and support staff accounts. Every user belongs to an organization. Phase 1 uses hardcoded credentials; this table is the foundation for proper RBAC in Phase 2.
+
+| Column | Type | Nullable | Default | Description |
+|---|---|---|---|---|
+| `id` | SERIAL | NOT NULL | auto | Primary key |
+| `organization_id` | INTEGER | NOT NULL | — | FK → `organizations.id` |
 | `username` | VARCHAR(100) | NOT NULL | — | Unique login name |
 | `password_hash` | VARCHAR(255) | NOT NULL | — | bcrypt hash — never store plaintext |
 | `email` | VARCHAR(100) | NULL | — | Optional contact email |
@@ -90,7 +107,7 @@ Stores dashboard and support staff accounts. Phase 1 uses hardcoded credentials;
 | `developer` | All of support + send commands, add error types |
 | `admin` | Full access including user management |
 
-**Indexes:** `idx_users_username` on `username`
+**Indexes:** `idx_users_username` on `username`, `idx_users_organization_id` on `organization_id`
 
 ---
 
@@ -314,7 +331,9 @@ Stores per-device MQTT credentials generated at device login. Rotated on each au
 
 | Index | Table | Column(s) | Reason |
 |---|---|---|---|
+| `idx_organizations_name` | organizations | name | Lookup by org name |
 | `idx_users_username` | users | username | Login lookup |
+| `idx_users_organization_id` | users | organization_id | Fetch all users in an org |
 | `idx_devices_device_id` | devices | device_id | Every device query uses this |
 | `idx_devices_online` | devices | online | Dashboard filter (online/offline) |
 | `idx_devices_customer` | devices | customer_name | Filter devices by customer |
