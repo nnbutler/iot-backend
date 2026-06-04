@@ -18,5 +18,20 @@ services:
       retries: 5
     restart: unless-stopped
 
+  backend:
+    build: ./backend
+    container_name: iot-backend-api
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:

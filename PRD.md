@@ -965,7 +965,7 @@ HISTORY:
 
 **Considered:** VPN to internal network  
 **Rejected:**
-- Scales poorly (IP conflicts at 100+ devices)
+- Scales poorly (IP conflicts at 250+ devices)
 - Single point of failure
 - Complex to manage across geographies
 - Doesn't support future customer API
