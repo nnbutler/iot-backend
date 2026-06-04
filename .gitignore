@@ -28,6 +28,9 @@ coverage.xml
 nginx/letsencrypt/
 nginx/certs/
 
+# Node
+node_modules/
+
 # IDE
 .vscode/
 .idea/
