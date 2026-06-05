@@ -14,6 +14,28 @@ INFLUXDB_BUCKET = "device_metrics"
 INFLUXDB_TOKEN = "device-manager-token"
 
 
+def _escape_flux_string(value: str) -> str:
+    """Escape a string for safe interpolation into Flux queries.
+
+    In Flux, strings are double-quoted and require backslash escaping of:
+    - Backslashes (\)
+    - Double quotes (")
+    - Special characters (newlines, tabs, etc.)
+
+    This prevents Flux query injection attacks.
+    """
+    if not isinstance(value, str):
+        return str(value)
+
+    # Escape in order: backslash first, then other characters
+    result = value.replace("\\", "\\\\")
+    result = result.replace('"', '\\"')
+    result = result.replace("\n", "\\n")
+    result = result.replace("\r", "\\r")
+    result = result.replace("\t", "\\t")
+    return result
+
+
 class InfluxDBMetrics:
     """Manages device telemetry metrics in InfluxDB."""
 
@@ -98,17 +120,27 @@ class InfluxDBMetrics:
         metric_type: str = "throughput",
         hours: int = 24,
     ) -> list[dict]:
-        """Retrieve historical metrics for a device."""
+        """Retrieve historical metrics for a device.
+
+        Args:
+            device_id: Device ID (escaped to prevent Flux injection)
+            metric_type: Metric type name (escaped to prevent Flux injection)
+            hours: Number of hours of historical data to retrieve
+        """
         if not self.client:
             logger.warning("InfluxDB not connected, cannot retrieve metrics")
             return []
 
         try:
             time_range = f"-{hours}h"
+            # Escape user-provided values to prevent Flux injection
+            safe_device_id = _escape_flux_string(device_id)
+            safe_metric_type = _escape_flux_string(metric_type)
+
             query = f'''
             from(bucket:"{INFLUXDB_BUCKET}")
               |> range(start: {time_range})
-              |> filter(fn: (r) => r._field == "value" and r.device_id == "{device_id}" and r.metric_type == "{metric_type}")
+              |> filter(fn: (r) => r._field == "value" and r.device_id == "{safe_device_id}" and r.metric_type == "{safe_metric_type}")
               |> sort(columns: ["_time"])
             '''
 
@@ -148,16 +180,25 @@ class InfluxDBMetrics:
         device_id: str,
         metric_type: str,
     ) -> Optional[float]:
-        """Get the latest value for a metric."""
+        """Get the latest value for a metric.
+
+        Args:
+            device_id: Device ID (escaped to prevent Flux injection)
+            metric_type: Metric type name (escaped to prevent Flux injection)
+        """
         if not self.client:
             return None
 
         try:
+            # Escape user-provided values to prevent Flux injection
+            safe_device_id = _escape_flux_string(device_id)
+            safe_metric_type = _escape_flux_string(metric_type)
+
             query = f'''
             from(bucket:"{INFLUXDB_BUCKET}")
               |> range(start: -1h)
-              |> filter(fn: (r) => r.device_id == "{device_id}")
-              |> filter(fn: (r) => r.metric_type == "{metric_type}")
+              |> filter(fn: (r) => r.device_id == "{safe_device_id}")
+              |> filter(fn: (r) => r.metric_type == "{safe_metric_type}")
               |> last()
             '''
 
