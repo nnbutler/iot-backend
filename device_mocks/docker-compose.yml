@@ -1,0 +1,80 @@
+# Docker Compose for mock devices (development/testing)
+#
+# PREREQUISITE: Main backend stack must be running first
+#   docker compose up -d
+#
+# Then in another terminal, run mock devices:
+#   docker compose -f device_mocks/docker-compose.yml up
+#
+# Or with farm profile (4 devices total):
+#   docker compose -f device_mocks/docker-compose.yml --profile farm up
+
+services:
+  # Single mock device for basic testing
+  device-single:
+    build: .
+    container_name: iot-mock-device-001
+    command:
+      - --device-id=mock-plc-001
+      - --customer=Demo Customer
+      - --location=Demo Lab
+      - --heartbeat-interval=15
+      - --backend-url=https://nginx:443
+      - --mqtt-broker=mosquitto
+      - --mqtt-port=1883
+    networks:
+      - iot-backend_default
+    restart: unless-stopped
+
+  # Farm device 1
+  device-farm-01:
+    build: .
+    container_name: iot-mock-device-farm-01
+    command:
+      - --device-id=mock-farm-01
+      - --customer=Acme Inc
+      - --location=Factory Floor A
+      - --heartbeat-interval=10
+      - --backend-url=https://nginx:443
+      - --mqtt-broker=mosquitto
+    networks:
+      - iot-backend_default
+    restart: unless-stopped
+    profiles: ["farm"]
+
+  # Farm device 2
+  device-farm-02:
+    build: .
+    container_name: iot-mock-device-farm-02
+    command:
+      - --device-id=mock-farm-02
+      - --customer=Acme Inc
+      - --location=Factory Floor B
+      - --heartbeat-interval=12
+      - --backend-url=https://nginx:443
+      - --mqtt-broker=mosquitto
+    networks:
+      - iot-backend_default
+    restart: unless-stopped
+    profiles: ["farm"]
+
+  # Farm device 3
+  device-farm-03:
+    build: .
+    container_name: iot-mock-device-farm-03
+    command:
+      - --device-id=mock-farm-03
+      - --customer=Beta Corp
+      - --location=Warehouse
+      - --heartbeat-interval=8
+      - --backend-url=https://nginx:443
+      - --mqtt-broker=mosquitto
+    networks:
+      - iot-backend_default
+    restart: unless-stopped
+    profiles: ["farm"]
+
+networks:
+  # Shared with main backend stack
+  iot-backend_default:
+    external: true
