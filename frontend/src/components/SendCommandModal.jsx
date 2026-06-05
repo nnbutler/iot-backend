@@ -1,31 +1,16 @@
 import { useState } from 'react'
 import client from '../api/client'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { CheckCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const COMMANDS = [
-  {
-    command_type: 'restart_plc',
-    label: 'Restart PLC',
-    description: 'Restarts the PLC logic. Use when the PLC is unresponsive or stuck.',
-    danger: false,
-  },
-  {
-    command_type: 'reset_state_machine',
-    label: 'Reset State Machine',
-    description: 'Clears a stuck state machine without a full reboot. Fastest fix for logic hangs.',
-    danger: false,
-  },
-  {
-    command_type: 'reboot_device',
-    label: 'Reboot Device',
-    description: 'Full device reboot. Clears all running processes. Use as a last resort.',
-    danger: true,
-  },
-  {
-    command_type: 'clear_error_log',
-    label: 'Clear Error Log',
-    description: 'Clears the local error log on the device. Does not fix any underlying issue.',
-    danger: false,
-  },
+  { command_type: 'restart_plc',         label: 'Restart PLC',          description: 'Restarts the PLC logic. Use when the PLC is unresponsive or stuck.',                    danger: false },
+  { command_type: 'reset_state_machine', label: 'Reset State Machine',   description: 'Clears a stuck state machine without a full reboot. Fastest fix for logic hangs.',      danger: false },
+  { command_type: 'reboot_device',       label: 'Reboot Device',         description: 'Full device reboot. Clears all running processes. Use as a last resort.',                danger: true  },
+  { command_type: 'clear_error_log',     label: 'Clear Error Log',       description: 'Clears the local error log on the device. Does not fix any underlying issue.',           danger: false },
 ]
 
 export default function SendCommandModal({ device_id, onClose, onSuccess }) {
@@ -39,9 +24,7 @@ export default function SendCommandModal({ device_id, onClose, onSuccess }) {
     setSubmitting(true)
     setError(null)
     try {
-      const response = await client.post(`/devices/${device_id}/commands`, {
-        command_type: selected.command_type,
-      })
+      const response = await client.post(`/devices/${device_id}/commands`, { command_type: selected.command_type })
       setSent(response.data)
     } catch (err) {
       setError(err.response?.data?.detail ?? 'Failed to send command.')
@@ -50,104 +33,82 @@ export default function SendCommandModal({ device_id, onClose, onSuccess }) {
   }
 
   return (
-    <div
-      data-testid="send-command-modal"
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-white rounded-lg w-full max-w-md">
-        <div className="p-6">
-          {sent ? (
-            <>
-              <div className="text-center py-4">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h2 className="text-lg font-semibold mb-1">Command Sent</h2>
-                <p className="text-sm text-gray-500 mb-1">
-                  <span className="font-medium">{sent.label}</span> was sent to{' '}
-                  <span className="font-mono">{device_id}</span>
-                </p>
-                <p className="text-xs text-gray-400">The device will execute it on its next poll cycle.</p>
-              </div>
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={onSuccess}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
-                >
-                  Done
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <h2 className="text-lg font-semibold mb-1">Send Command</h2>
-              <p className="text-sm text-gray-500 mb-5">
-                Device: <span className="font-mono">{device_id}</span>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent data-testid="send-command-modal">
+        {sent ? (
+          <div className="px-6 py-10 flex flex-col items-center text-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="font-semibold">Command Sent</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                <span className="font-medium text-foreground">{selected?.label}</span> was sent to{' '}
+                <code className="text-xs">{device_id}</code>
               </p>
+              <p className="text-xs text-muted-foreground mt-1">The device will execute it on its next poll cycle.</p>
+            </div>
+            <Button className="mt-2" onClick={onSuccess}>Done</Button>
+          </div>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Send Command</DialogTitle>
+              <DialogDescription>
+                Device: <code className="text-xs text-foreground">{device_id}</code>
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="space-y-2 mb-5">
-                {COMMANDS.map((cmd) => (
+            <DialogBody className="space-y-2">
+              {COMMANDS.map((cmd) => {
+                const isSelected = selected?.command_type === cmd.command_type
+                return (
                   <label
                     key={cmd.command_type}
-                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selected?.command_type === cmd.command_type
-                        ? cmd.danger
-                          ? 'border-red-500 bg-red-50'
-                          : 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
+                    className={cn(
+                      'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                      isSelected
+                        ? cmd.danger ? 'border-destructive bg-destructive/5' : 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted/50'
+                    )}
                   >
                     <input
                       type="radio"
                       name="command"
                       className="mt-0.5 shrink-0"
-                      checked={selected?.command_type === cmd.command_type}
+                      checked={isSelected}
                       onChange={() => setSelected(cmd)}
                     />
                     <span className="text-sm">
-                      <span className={`font-medium ${cmd.danger ? 'text-red-700' : 'text-gray-900'}`}>
+                      <span className={cn('font-medium', cmd.danger ? 'text-destructive' : 'text-foreground')}>
                         {cmd.label}
-                        {cmd.danger && <span className="ml-1 text-xs font-normal text-red-500">(disruptive)</span>}
+                        {cmd.danger && <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">disruptive</Badge>}
                       </span>
                       <br />
-                      <span className="text-gray-500">{cmd.description}</span>
+                      <span className="text-muted-foreground">{cmd.description}</span>
                     </span>
                   </label>
-                ))}
-              </div>
+                )
+              })}
 
               {error && (
-                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-4">{error}</p>
+                <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{error}</p>
               )}
+            </DialogBody>
 
-              <div className="flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={!selected || submitting}
-                  className={`px-4 py-2 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors ${
-                    selected?.danger
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  {submitting ? 'Sending…' : 'Send Command'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button
+                onClick={handleSend}
+                disabled={!selected || submitting}
+                variant={selected?.danger ? 'destructive' : 'default'}
+              >
+                {submitting ? 'Sending…' : 'Send Command'}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
