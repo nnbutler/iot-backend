@@ -29,20 +29,16 @@ def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt
 
 
-def _compute_uptime(device_id: str, db: Session) -> float:
-    """Uptime % over the last UPTIME_WINDOW_DAYS days from error history."""
+def _compute_uptime(device_id: str, errors: list) -> float:
+    """Uptime % over the last UPTIME_WINDOW_DAYS days from error history.
+
+    Args:
+        device_id: Device ID (used for validation only)
+        errors: List of DeviceErrorHistory records already filtered to this device and time window
+    """
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(days=UPTIME_WINDOW_DAYS)
     window_seconds = UPTIME_WINDOW_DAYS * 24 * 3600
-
-    errors = (
-        db.query(DeviceErrorHistory)
-        .filter(
-            DeviceErrorHistory.device_id == device_id,
-            DeviceErrorHistory.occurred_at >= window_start,
-        )
-        .all()
-    )
 
     error_seconds = 0.0
     for e in errors:
@@ -140,6 +136,27 @@ def list_devices(
 
     devices = query.all()
 
+    # Fetch all error history in one query to avoid N+1
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=UPTIME_WINDOW_DAYS)
+    device_ids = [d.device_id for d in devices]
+
+    error_history = (
+        db.query(DeviceErrorHistory)
+        .filter(
+            DeviceErrorHistory.device_id.in_(device_ids),
+            DeviceErrorHistory.occurred_at >= window_start,
+        )
+        .all()
+    ) if device_ids else []
+
+    # Group errors by device_id for O(1) lookup
+    errors_by_device = {}
+    for error in error_history:
+        if error.device_id not in errors_by_device:
+            errors_by_device[error.device_id] = []
+        errors_by_device[error.device_id].append(error)
+
     return {
         "devices": [
             {
@@ -149,7 +166,7 @@ def list_devices(
                 "online": d.online,
                 "last_seen": _as_utc(d.last_seen).isoformat() if d.last_seen else None,
                 "last_error": d.last_error,
-                "uptime_percent": _compute_uptime(d.device_id, db),
+                "uptime_percent": _compute_uptime(d.device_id, errors_by_device.get(d.device_id, [])),
             }
             for d in devices
         ]
