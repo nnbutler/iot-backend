@@ -2,8 +2,9 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -95,9 +96,50 @@ def _get_troubleshooting(error_code: str, db: Session) -> Optional[dict]:
 def list_devices(
     db: Session = Depends(get_db),
     _: str = Depends(get_current_user),
+    # Filtering
+    search: Optional[str] = Query(None, description="Search device_id, customer_name, location"),
+    online: Optional[bool] = Query(None, description="Filter by online status"),
+    customer: Optional[str] = Query(None, description="Filter by customer name"),
+    has_error: Optional[bool] = Query(None, description="Filter by error presence"),
+    # Sorting
+    sort_by: str = Query("device_id", description="Sort field: device_id, customer_name, location, online, last_error, last_seen, uptime_percent"),
+    sort_order: str = Query("asc", description="Sort order: asc or desc"),
 ) -> dict:
-    """List all devices with status summary."""
-    devices = db.query(Device).order_by(Device.device_id).all()
+    """List devices with filtering and sorting."""
+    query = db.query(Device)
+
+    # Apply filters
+    if search:
+        search_lower = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                Device.device_id.ilike(search_lower),
+                Device.customer_name.ilike(search_lower),
+                Device.location.ilike(search_lower),
+            )
+        )
+
+    if online is not None:
+        query = query.filter(Device.online == online)
+
+    if customer:
+        query = query.filter(Device.customer_name.ilike(f"%{customer.lower()}%"))
+
+    if has_error is not None:
+        if has_error:
+            query = query.filter(Device.last_error.isnot(None))
+        else:
+            query = query.filter(Device.last_error.is_(None))
+
+    # Apply sorting
+    sort_field = getattr(Device, sort_by, Device.device_id)
+    if sort_order.lower() == "desc":
+        query = query.order_by(sort_field.desc())
+    else:
+        query = query.order_by(sort_field)
+
+    devices = query.all()
+
     return {
         "devices": [
             {
