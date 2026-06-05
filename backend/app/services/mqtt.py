@@ -121,11 +121,11 @@ class MQTTManager:
                 last_error = data.get("last_error")
                 last_error_msg = data.get("last_error_message")
 
-                # Store telemetry metrics if present
+                # Store telemetry metrics if present (use explicit None checks to allow 0.0 values)
                 throughput = data.get("throughput")
                 cycle_time = data.get("cycle_time")
                 error_rate = data.get("error_rate")
-                if any([throughput, cycle_time, error_rate]):
+                if any(v is not None for v in [throughput, cycle_time, error_rate]):
                     metrics_db.store_metrics(device_id, throughput, cycle_time, error_rate)
 
                 error_changed = device.last_error != last_error
