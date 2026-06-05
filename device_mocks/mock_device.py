@@ -53,6 +53,7 @@ class MockDevice:
         self.api_key: Optional[str] = None
         self.mqtt_client: Optional[mqtt.Client] = None
         self.running = False
+        self._rebooting = False
 
         # Simulated device state
         self.online = True
@@ -156,6 +157,8 @@ class MockDevice:
 
     def send_heartbeat(self) -> bool:
         """Send heartbeat with current metrics."""
+        if self._rebooting:
+            return False
         try:
             self._simulate_workload()
             self._simulate_error()
@@ -210,34 +213,69 @@ class MockDevice:
             return False
 
     def _handle_command(self, command: dict):
-        """Handle command from backend."""
+        """Dispatch command to the appropriate handler in a background thread."""
+        threading.Thread(target=self._execute_command, args=(command,), daemon=True).start()
+
+    def _execute_command(self, command: dict):
+        command_id = command.get("id")
+        command_type = command.get("command_type")
+        logger.info(f"📨 Received command {command_id}: {command_type}")
         try:
-            command_id = command.get("id")
-            command_type = command.get("command_type")
-            args = command.get("args", {})
-
-            logger.info(f"📨 Received command {command_id}: {command_type}")
-
-            # Simulate command execution
-            time.sleep(random.uniform(1, 3))  # Simulate work
-
-            # Determine if execution succeeds (95% success rate)
-            success = random.random() < 0.95
-
-            if success:
-                status = "success"
-                result = f"Successfully executed {command_type}"
-                logger.info(f"✓ Command {command_id} executed successfully")
+            if command_type == "restart_plc":
+                self._cmd_restart_plc(command_id)
+            elif command_type == "reset_state_machine":
+                self._cmd_reset_state_machine(command_id)
+            elif command_type == "reboot_device":
+                self._cmd_reboot_device(command_id)
+            elif command_type == "clear_error_log":
+                self._cmd_clear_error_log(command_id)
             else:
-                status = "failed"
-                result = f"Failed to execute {command_type}: Device busy"
-                logger.error(f"✗ Command {command_id} failed")
-
-            # Report result back to backend
-            self._report_command_result(command_id, status, result)
-
+                self._report_command_result(command_id, "failed", f"Unknown command: {command_type}")
         except Exception as e:
-            logger.error(f"Error handling command: {e}")
+            logger.error(f"Error executing command {command_id}: {e}")
+            self._report_command_result(command_id, "failed", str(e))
+
+    def _cmd_restart_plc(self, command_id):
+        self.send_log("INFO", f"[CMD {command_id}] Restarting PLC logic...")
+        self._report_command_result(command_id, "executing", "Restarting PLC logic...")
+        self.state = "restarting"
+        time.sleep(random.uniform(3, 5))
+        self.state = "running"
+        self.last_error = None
+        self._report_command_result(command_id, "success", "PLC restarted successfully")
+        self.send_log("INFO", f"[CMD {command_id}] PLC restarted successfully")
+        logger.info(f"✓ PLC restarted (command {command_id})")
+
+    def _cmd_reset_state_machine(self, command_id):
+        self.send_log("INFO", f"[CMD {command_id}] Resetting state machine...")
+        self._report_command_result(command_id, "executing", "Resetting state machine...")
+        self.state = "resetting"
+        time.sleep(random.uniform(1, 2))
+        self.state = "running"
+        self._report_command_result(command_id, "success", "State machine reset successfully")
+        self.send_log("INFO", f"[CMD {command_id}] State machine reset successfully")
+        logger.info(f"✓ State machine reset (command {command_id})")
+
+    def _cmd_reboot_device(self, command_id):
+        self.send_log("WARNING", f"[CMD {command_id}] Rebooting device — going offline...")
+        self._report_command_result(command_id, "executing", "Rebooting device...")
+        self.state = "rebooting"
+        self._rebooting = True  # Suppress heartbeats — watchdog will mark device offline
+        reboot_duration = random.uniform(10, 15)
+        logger.info(f"🔄 Rebooting for {reboot_duration:.0f}s...")
+        time.sleep(reboot_duration)
+        self._rebooting = False
+        self.state = "running"
+        self.last_error = None
+        self._report_command_result(command_id, "success", "Device rebooted successfully")
+        self.send_log("INFO", f"[CMD {command_id}] Device back online after reboot")
+        logger.info(f"✓ Device rebooted (command {command_id})")
+
+    def _cmd_clear_error_log(self, command_id):
+        self.last_error = None
+        self._report_command_result(command_id, "success", "Error log cleared")
+        self.send_log("INFO", f"[CMD {command_id}] Error log cleared by operator")
+        logger.info(f"✓ Error log cleared (command {command_id})")
 
     def _report_command_result(self, command_id: int, status: str, result: str):
         """Report command execution result back to backend."""
