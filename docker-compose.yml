@@ -45,6 +45,21 @@ services:
       - backend
     restart: unless-stopped
 
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: iot-mqtt
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+    ports:
+      - "1883:1883"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t '$$health' -m ping -q 0 2>/dev/null && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   nginx:
     build: ./nginx
     container_name: iot-nginx
@@ -57,3 +72,4 @@ services:
 
 volumes:
   postgres_data:
+  mosquitto_data:
