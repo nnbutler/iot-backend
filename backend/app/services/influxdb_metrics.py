@@ -57,7 +57,7 @@ class InfluxDBMetrics:
         self.query_api = None
 
     def connect(self):
-        """Connect to InfluxDB."""
+        """Connect to InfluxDB and initialize buckets."""
         try:
             print(f"[InfluxDB] Attempting to connect to {INFLUXDB_URL}", flush=True)
             logger.info(f"Attempting to connect to InfluxDB at {INFLUXDB_URL}")
@@ -71,14 +71,36 @@ class InfluxDBMetrics:
             print(f"[InfluxDB] Health check: {health.status}", flush=True)
             logger.info(f"InfluxDB health check: {health.status}")
 
-            self.write_api = self.client.write_api()
+            self.write_api = self.client.write_api(write_client=SYNCHRONOUS)
             self.query_api = self.client.query_api()
+
+            # Ensure buckets exist
+            self._ensure_buckets_exist()
+
             print(f"[InfluxDB] ✓ Connected to {INFLUXDB_URL} (org={INFLUXDB_ORG}, bucket={INFLUXDB_BUCKET})", flush=True)
             logger.info(f"✓ Connected to InfluxDB at {INFLUXDB_URL} (org={INFLUXDB_ORG}, bucket={INFLUXDB_BUCKET})")
         except Exception as e:
             print(f"[InfluxDB] ✗ Failed to connect: {e}", flush=True)
             logger.error(f"Failed to connect to InfluxDB: {e}", exc_info=True)
             self.client = None
+
+    def _ensure_buckets_exist(self):
+        """Ensure required buckets exist in InfluxDB."""
+        if not self.client:
+            return
+
+        try:
+            buckets_api = self.client.buckets_api()
+            existing_buckets = {b.name for b in buckets_api.find_buckets()}
+
+            for bucket_name in [INFLUXDB_BUCKET, INFLUXDB_LOG_BUCKET]:
+                if bucket_name not in existing_buckets:
+                    from influxdb_client.client.write_api import SYNCHRONOUS
+                    buckets_api.create_bucket(bucket_name=bucket_name, org=INFLUXDB_ORG)
+                    print(f"[InfluxDB] ✓ Created bucket: {bucket_name}", flush=True)
+                    logger.info(f"Created bucket: {bucket_name}")
+        except Exception as e:
+            logger.error(f"Failed to ensure buckets exist: {e}", exc_info=True)
 
     def disconnect(self):
         """Disconnect from InfluxDB."""
@@ -242,9 +264,12 @@ class InfluxDBMetrics:
             escaped_device_id = _escape_tag(device_id)
             escaped_msg = message.replace("\\", "\\\\").replace('"', '\\"')
             line = f'device_log,device_id={escaped_device_id},level={level} message="{escaped_msg}" {ts_ns}'
+            print(f"[InfluxDB] Writing log line protocol: {line[:100]}", flush=True)
             self.write_api.write(bucket=INFLUXDB_LOG_BUCKET, org=INFLUXDB_ORG, write_precision=WritePrecision.NS, record=line)
-            logger.debug(f"Stored log for {device_id} [{level}]: {message[:50]}")
+            print(f"[InfluxDB] ✓ Stored log for {device_id} [{level}]", flush=True)
+            logger.info(f"Stored log for {device_id} [{level}]: {message[:50]}")
         except Exception as e:
+            print(f"[InfluxDB] ✗ Failed to store log for {device_id}: {e}", flush=True)
             logger.error(f"Failed to store log for {device_id}: {e}", exc_info=True)
 
     def get_logs(
@@ -309,6 +334,7 @@ class InfluxDBMetrics:
         except Exception as e:
             logger.error(f"Failed to retrieve logs for {device_id}: {e}", exc_info=True)
             return {"logs": [], "has_more": False, "next_before_timestamp": None}
+
 
 
 # Global metrics instance

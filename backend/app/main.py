@@ -6,6 +6,7 @@ from app.routes.commands import router as commands_router
 from app.routes.devices import router as devices_router
 from app.routes.errors import router as errors_router
 from app.routes.health import router as health_router
+from app.routes.logs import router as logs_router
 from app.routes.metrics import router as metrics_router
 from app.services.influxdb_metrics import metrics_db
 from app.services.mqtt import mqtt_manager
@@ -21,6 +22,7 @@ app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(errors_router)
 app.include_router(commands_router)
+app.include_router(logs_router)
 app.include_router(metrics_router)
 
 

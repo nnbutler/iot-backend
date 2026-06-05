@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec *)",
+      "Bash(curl -s http://localhost:8080/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/)",
+      "Bash(git -C /home/nnfuller/dev/iot-backend add nginx/ docker-compose.yml frontend/vite.config.js frontend/index.html)",
+      "Bash(git -C /home/nnfuller/dev/iot-backend diff --cached --stat)"
+    ]
+  }
+}

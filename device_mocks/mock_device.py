@@ -197,11 +197,13 @@ class MockDevice:
 
             if self.mqtt_client:
                 topic = f"devices/{self.device_id}/logs"
-                self.mqtt_client.publish(topic, json.dumps(payload), qos=1)
+                result = self.mqtt_client.publish(topic, json.dumps(payload), qos=1)
+                logger.info(f"📝 Published log [{level}]: {message}")
                 return True
+            logger.warning("⚠️  MQTT not connected, cannot send log")
             return False
         except Exception as e:
-            logger.error(f"Failed to send log: {e}")
+            logger.error(f"Failed to send log: {e}", exc_info=True)
             return False
 
     def _handle_command(self, command: dict):
@@ -283,9 +285,11 @@ class MockDevice:
                         f"error={self.last_error or 'none'}"
                     )
 
-                    # Occasionally send a log
-                    if random.random() < 0.2:  # 20% chance per heartbeat
-                        self.send_log("INFO", "Device running normally")
+                    # Send a log (temporarily always for testing)
+                    if self.send_log("INFO", "Device running normally"):
+                        logger.info("📝 Log message sent")
+                    else:
+                        logger.warning("⚠️  Failed to send log")
 
                 time.sleep(heartbeat_interval)
         except KeyboardInterrupt:

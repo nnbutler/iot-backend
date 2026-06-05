@@ -179,6 +179,7 @@ class MQTTManager:
     def _handle_logs(self, device_id: str, payload: bytes):
         """Process device logs."""
         try:
+            logger.debug(f"_handle_logs called for {device_id}")
             data = json.loads(payload.decode())
             db = self._get_db()
             try:
@@ -189,14 +190,16 @@ class MQTTManager:
 
                 level = data.get("level", "INFO")
                 message = data.get("message", "")
+                logger.info(f"Storing log for {device_id} [{level}]: {message[:50]}")
 
                 metrics_db.store_log(device_id, level, message)
+                logger.info(f"✓ Log stored for {device_id}")
             finally:
                 db.close()
         except json.JSONDecodeError:
             logger.error(f"Invalid JSON in log payload: {payload}")
         except Exception as e:
-            logger.error(f"Error processing log for {device_id}: {e}")
+            logger.error(f"Error processing log for {device_id}: {e}", exc_info=True)
 
     def _handle_command_result(self, device_id: str, command_id: str, payload: bytes):
         """Process command execution result from device."""
