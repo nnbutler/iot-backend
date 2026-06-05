@@ -18,6 +18,9 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(
     level=logging.INFO,
