@@ -30,7 +30,7 @@ async def broadcast(topic: str, payload: str) -> None:
             await ws.send_json(msg)
         except Exception:
             dead.add(ws)
-    _clients -= dead
+    _clients.difference_update(dead)
 
 
 @router.websocket("/mqtt-debug")

@@ -34,7 +34,7 @@ app.include_router(debug_router)
 async def startup_event():
     """Connect to MQTT broker and InfluxDB on startup."""
     print("=== APP STARTUP EVENT ===", flush=True)
-    mqtt_manager.set_event_loop(asyncio.get_event_loop())
+    mqtt_manager.set_event_loop(asyncio.get_running_loop())
     mqtt_manager.connect()
     print("MQTT connected, now connecting to InfluxDB...", flush=True)
     metrics_db.connect()
