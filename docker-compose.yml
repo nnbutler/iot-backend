@@ -64,7 +64,11 @@ services:
     build: ./nginx
     container_name: iot-nginx
     ports:
-      - "8080:80"
+      - "8080:80"      # HTTP (redirects to HTTPS)
+      - "8443:443"     # HTTPS (dev: self-signed; prod: Let's Encrypt)
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./certbot_data:/var/www/certbot:ro
     depends_on:
       - backend
       - frontend
