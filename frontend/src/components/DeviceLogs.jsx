@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 
-const LEVELS = ['ALL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'CRITICAL']
+const LEVELS = ['ERROR', 'CRITICAL', 'WARNING', 'INFO', 'DEBUG']
 
 const LEVEL_VARIANT = {
   ERROR:    'destructive',
@@ -21,29 +21,38 @@ function LevelBadge({ level }) {
 
 export default function DeviceLogs({ device_id }) {
   const [logs, setLogs] = useState([])
-  const [levelFilter, setLevelFilter] = useState('ALL')
+  const [activeLevels, setActiveLevels] = useState(new Set(LEVELS))
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [nextCursor, setNextCursor] = useState(null)
   const [error, setError] = useState(null)
 
-  const fetchLogs = useCallback(async (level, cursor = null) => {
+  const toggleLevel = (level) => {
+    setActiveLevels(prev => {
+      const next = new Set(prev)
+      next.has(level) ? next.delete(level) : next.add(level)
+      return next
+    })
+  }
+
+  const fetchLogs = useCallback(async (levels, cursor = null) => {
     const params = new URLSearchParams({ limit: 50 })
-    if (level !== 'ALL') params.append('level', level)
+    levels.forEach(l => params.append('level', l))
     if (cursor) params.append('before_timestamp', cursor)
     const resp = await client.get(`/devices/${device_id}/logs?${params}`)
     return resp.data
   }, [device_id])
 
   useEffect(() => {
+    const levels = [...activeLevels]
     let cancelled = false
     setLoading(true)
     setError(null)
     setLogs([])
     setNextCursor(null)
 
-    fetchLogs(levelFilter)
+    fetchLogs(levels)
       .then(data => {
         if (cancelled) return
         setLogs(data.logs)
@@ -54,12 +63,13 @@ export default function DeviceLogs({ device_id }) {
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [levelFilter, fetchLogs])
+  }, [activeLevels, fetchLogs])
 
   const loadMore = async () => {
+    const levels = [...activeLevels]
     setLoadingMore(true)
     try {
-      const data = await fetchLogs(levelFilter, nextCursor)
+      const data = await fetchLogs(levels, nextCursor)
       setLogs(prev => [...prev, ...data.logs])
       setHasMore(data.has_more)
       setNextCursor(data.next_before_timestamp)
@@ -75,13 +85,16 @@ export default function DeviceLogs({ device_id }) {
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-sm">Device Logs</CardTitle>
-          <div className="flex gap-1 flex-wrap">
+          <div className="flex gap-1 flex-wrap items-center">
+            <Button size="sm" variant="ghost" onClick={() => setActiveLevels(new Set(LEVELS))} className="h-7 text-xs px-2.5">All</Button>
+            <Button size="sm" variant="ghost" onClick={() => setActiveLevels(new Set())} className="h-7 text-xs px-2.5">None</Button>
+            <div className="w-px h-4 bg-border mx-1" />
             {LEVELS.map(level => (
               <Button
                 key={level}
                 size="sm"
-                variant={levelFilter === level ? 'default' : 'ghost'}
-                onClick={() => setLevelFilter(level)}
+                variant={activeLevels.has(level) ? 'default' : 'outline'}
+                onClick={() => toggleLevel(level)}
                 className="h-7 text-xs px-2.5"
               >
                 {level}
@@ -97,7 +110,7 @@ export default function DeviceLogs({ device_id }) {
           <p className="text-muted-foreground text-sm">Loading logs...</p>
         ) : logs.length === 0 ? (
           <p className="text-muted-foreground text-sm py-4 text-center">
-            {levelFilter === 'ALL' ? 'No logs yet' : `No ${levelFilter} logs`}
+            {activeLevels.size === LEVELS.length ? 'No logs yet' : 'No logs for selected levels'}
           </p>
         ) : (
           <>

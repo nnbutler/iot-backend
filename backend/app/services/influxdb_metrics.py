@@ -253,7 +253,7 @@ class InfluxDBMetrics:
     def get_logs(
         self,
         device_id: str,
-        level: Optional[str] = None,
+        levels: Optional[list] = None,
         limit: int = 50,
         before_timestamp: Optional[str] = None,
     ) -> dict:
@@ -277,7 +277,11 @@ class InfluxDBMetrics:
             start = "-1000d"
             stop = f'time(v: "{before_timestamp}")' if before_timestamp else "now()"
 
-            level_filter = f'|> filter(fn: (r) => r.level == "{level}")' if level else ""
+            if levels:
+                level_set = "[" + ", ".join(f'"{l}"' for l in levels) + "]"
+                level_filter = f'|> filter(fn: (r) => contains(value: r.level, set: {level_set}))'
+            else:
+                level_filter = ""
 
             query = f'''
             from(bucket:"{INFLUXDB_LOG_BUCKET}")
@@ -286,6 +290,7 @@ class InfluxDBMetrics:
               |> filter(fn: (r) => r._field == "message")
               |> filter(fn: (r) => r.device_id == "{safe_device_id}")
               {level_filter}
+              |> group()
               |> sort(columns: ["_time"], desc: true)
               |> limit(n: {limit + 1})
             '''
@@ -306,7 +311,7 @@ class InfluxDBMetrics:
                 logs = logs[:limit]
             next_before_timestamp = logs[-1]["timestamp"] if logs and has_more else None
 
-            logger.debug(f"Retrieved {len(logs)} logs for {device_id} (level={level})")
+            logger.debug(f"Retrieved {len(logs)} logs for {device_id} (levels={levels})")
             return {
                 "logs": logs,
                 "has_more": has_more,
