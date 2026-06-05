@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import client from '../api/client'
-import { formatDate, formatStatus, formatSeverity } from '../utils/formatting'
+import { formatDate } from '../utils/formatting'
 import ErrorMessage from '../components/ErrorMessage'
 import SendCommandModal from '../components/SendCommandModal'
 import RepairOutcomeModal from '../components/RepairOutcomeModal'
 import DeviceLogs from '../components/DeviceLogs'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { ArrowLeft, Terminal, Wrench } from 'lucide-react'
 
 const MOCK_DEVICE_STATUS = {
   device_id: 'plc-001',
@@ -25,32 +29,20 @@ const MOCK_DEVICE_STATUS = {
     display_name: 'Sensor Disconnected',
     success_rate: 0.88,
     repair_actions: [
-      {
-        id: 1,
-        step: 1,
-        action: 'Check physical cable connection at sensor and PLC',
-        description: 'Verify cable is plugged in at both ends and connector is seated properly',
-        estimated_time: 5,
-        success_rate: 0.88,
-      },
-      {
-        id: 2,
-        step: 2,
-        action: 'Power cycle the sensor',
-        description: 'Turn off sensor (power switch or unplug), wait 10 seconds, turn back on',
-        estimated_time: 2,
-        success_rate: 0.85,
-      },
-      {
-        id: 3,
-        step: 3,
-        action: 'Power cycle entire unit',
-        description: 'Perform full power cycle of the entire equipment',
-        estimated_time: 3,
-        success_rate: 0.92,
-      },
+      { id: 1, step: 1, action: 'Check physical cable connection at sensor and PLC', description: 'Verify cable is plugged in at both ends and connector is seated properly', estimated_time: 5, success_rate: 0.88 },
+      { id: 2, step: 2, action: 'Power cycle the sensor', description: 'Turn off sensor (power switch or unplug), wait 10 seconds, turn back on', estimated_time: 2, success_rate: 0.85 },
+      { id: 3, step: 3, action: 'Power cycle entire unit', description: 'Perform full power cycle of the entire equipment', estimated_time: 3, success_rate: 0.92 },
     ],
   },
+}
+
+function InfoRow({ label, children }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mt-0.5">{children}</div>
+    </div>
+  )
 }
 
 export default function DeviceDetail() {
@@ -61,9 +53,7 @@ export default function DeviceDetail() {
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [showRepairModal, setShowRepairModal] = useState(false)
 
-  useEffect(() => {
-    fetchDevice()
-  }, [device_id])
+  useEffect(() => { fetchDevice() }, [device_id])
 
   const fetchDevice = async () => {
     try {
@@ -81,8 +71,8 @@ export default function DeviceDetail() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center text-gray-600">Loading device...</div>
+      <div className="max-w-4xl mx-auto px-4 py-8 text-center text-muted-foreground">
+        Loading device...
       </div>
     )
   }
@@ -96,145 +86,134 @@ export default function DeviceDetail() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <Link to="/devices" className="text-blue-600 hover:text-blue-800 mb-6 inline-block">
-        ← Back to Devices
-      </Link>
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" asChild>
+          <Link to="/devices"><ArrowLeft className="h-4 w-4 mr-1" />Devices</Link>
+        </Button>
+        <h1 className="text-2xl font-semibold tracking-tight font-mono">{device.device_id}</h1>
+        <Badge variant={device.online ? 'success' : 'secondary'}>
+          {device.online ? 'Online' : 'Offline'}
+        </Badge>
+      </div>
 
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Device Info Card */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900">Device Info</h2>
-          <div className="space-y-3 text-sm">
-            <div>
-              <span className="font-medium text-gray-600">ID:</span>
-              <p className="font-mono text-gray-900">{device.device_id}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Status:</span>
-              <p className="mt-1">{formatStatus(device.online)}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Type:</span>
-              <p className="text-gray-900">{device.device_type || 'N/A'}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Customer:</span>
-              <p className="text-gray-900">{device.customer_name || 'N/A'}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Location:</span>
-              <p className="text-gray-900">{device.location || 'N/A'}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Firmware:</span>
-              <p className="text-gray-900">{device.firmware_version || 'N/A'}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Last Seen:</span>
-              <p className="text-gray-900 text-xs">{formatDate(device.last_seen)}</p>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Device Info */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Device Info</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <InfoRow label="Type">
+              <span className="text-foreground">{device.device_type || '—'}</span>
+            </InfoRow>
+            <InfoRow label="Customer">
+              <span className="text-foreground">{device.customer_name || '—'}</span>
+            </InfoRow>
+            <InfoRow label="Location">
+              <span className="text-foreground">{device.location || '—'}</span>
+            </InfoRow>
+            <InfoRow label="Firmware">
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{device.firmware_version || '—'}</code>
+            </InfoRow>
+            <InfoRow label="Last Seen">
+              <span className="text-foreground text-xs">{formatDate(device.last_seen)}</span>
+            </InfoRow>
+          </CardContent>
+        </Card>
 
-        {/* Last Error Card */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900">Last Error</h2>
-          {device.last_error ? (
-            <div className="space-y-3">
-              <div>
-                <span className="font-medium text-gray-600 text-sm">Code:</span>
-                <p className="font-mono text-sm text-red-700 bg-red-50 px-2 py-1 rounded mt-1">
-                  {device.last_error.code}
-                </p>
+        {/* Last Error */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Last Error</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {device.last_error ? (
+              <div className="space-y-3">
+                <InfoRow label="Code">
+                  <code className="text-xs bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">
+                    {device.last_error.code}
+                  </code>
+                </InfoRow>
+                <InfoRow label="Message">
+                  <span className="text-foreground">{device.last_error.message}</span>
+                </InfoRow>
+                <InfoRow label="Occurred">
+                  <span className="text-foreground text-xs">{formatDate(device.last_error.occurred_at)}</span>
+                </InfoRow>
               </div>
-              <div>
-                <span className="font-medium text-gray-600 text-sm">Message:</span>
-                <p className="text-gray-900 text-sm mt-1">{device.last_error.message}</p>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600 text-sm">Occurred:</span>
-                <p className="text-gray-900 text-xs mt-1">{formatDate(device.last_error.occurred_at)}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-gray-500">No recent errors</p>
-          )}
-        </div>
+            ) : (
+              <p className="text-muted-foreground">No recent errors</p>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Actions Card */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900">Actions</h2>
-          <div className="space-y-3">
-            <button
-              onClick={() => setShowCommandModal(true)}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
-            >
-              Send Command
-            </button>
-            <button
-              onClick={() => setShowRepairModal(true)}
-              className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium text-sm"
-            >
-              Record Repair
-            </button>
-          </div>
-        </div>
+        {/* Actions */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button className="w-full" onClick={() => setShowCommandModal(true)}>
+              <Terminal className="h-4 w-4" />Send Command
+            </Button>
+            <Button className="w-full" variant="secondary" onClick={() => setShowRepairModal(true)}>
+              <Wrench className="h-4 w-4" />Record Repair
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Repair Suggestions */}
+      {/* Repair Steps */}
       {device.troubleshooting && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900">
-            Repair Steps for: {device.troubleshooting.display_name}
-          </h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Success rate: {(device.troubleshooting.success_rate * 100).toFixed(1)}%
-          </p>
-          <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">
+                Repair Steps — {device.troubleshooting.display_name}
+              </CardTitle>
+              <Badge variant="outline">
+                {(device.troubleshooting.success_rate * 100).toFixed(0)}% success rate
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {device.troubleshooting.repair_actions?.map((action, idx) => (
-              <div key={action.id} className="border-l-4 border-blue-500 pl-4 py-2">
-                <h3 className="font-semibold text-gray-900 text-sm">
-                  Step {idx + 1}: {action.action}
-                </h3>
-                <p className="text-gray-600 text-sm mt-1">{action.description}</p>
-                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                  <span>Estimated: {action.estimated_time} min</span>
-                  <span>Success rate: {(action.success_rate * 100).toFixed(1)}%</span>
+              <div key={action.id} className="flex gap-4">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center mt-0.5">
+                  {idx + 1}
+                </div>
+                <div>
+                  <p className="font-medium text-sm">{action.action}</p>
+                  <p className="text-muted-foreground text-sm mt-0.5">{action.description}</p>
+                  <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
+                    <span>~{action.estimated_time} min</span>
+                    <span>{(action.success_rate * 100).toFixed(0)}% success</span>
+                  </div>
                 </div>
               </div>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="mt-6">
-        <DeviceLogs device_id={device.device_id} />
-      </div>
+      <DeviceLogs device_id={device.device_id} />
 
-      {/* Modals */}
       {showCommandModal && (
         <SendCommandModal
           device_id={device.device_id}
           onClose={() => setShowCommandModal(false)}
-          onSuccess={() => {
-            setShowCommandModal(false)
-            fetchDevice()
-          }}
+          onSuccess={() => { setShowCommandModal(false); fetchDevice() }}
         />
       )}
-
       {showRepairModal && (
         <RepairOutcomeModal
           device_id={device.device_id}
           error_code={device.last_error?.code}
           onClose={() => setShowRepairModal(false)}
-          onSuccess={() => {
-            setShowRepairModal(false)
-            fetchDevice()
-          }}
+          onSuccess={() => { setShowRepairModal(false); fetchDevice() }}
         />
       )}
     </div>
