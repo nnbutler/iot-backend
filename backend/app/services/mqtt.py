@@ -111,6 +111,8 @@ class MQTTManager:
 
                 # Update device status
                 from datetime import datetime, timezone
+                from app.services.influxdb_metrics import metrics_db
+
                 now = datetime.now(timezone.utc)
 
                 online = data.get("online", True)
@@ -118,6 +120,13 @@ class MQTTManager:
                 firmware = data.get("firmware_version")
                 last_error = data.get("last_error")
                 last_error_msg = data.get("last_error_message")
+
+                # Store telemetry metrics if present
+                throughput = data.get("throughput")
+                cycle_time = data.get("cycle_time")
+                error_rate = data.get("error_rate")
+                if any([throughput, cycle_time, error_rate]):
+                    metrics_db.store_metrics(device_id, throughput, cycle_time, error_rate)
 
                 error_changed = device.last_error != last_error
 

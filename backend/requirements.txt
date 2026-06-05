@@ -15,6 +15,7 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
 paho-mqtt==1.6.1
+influxdb-client==1.18.0
 
 # Testing
 pytest==7.4.3
