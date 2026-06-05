@@ -248,6 +248,9 @@ class HeartbeatRequest(BaseModel):
     firmware_version: Optional[str] = None
     last_error: Optional[str] = None
     last_error_message: Optional[str] = None
+    throughput: Optional[float] = None  # items/hour
+    cycle_time: Optional[float] = None  # seconds
+    error_rate: Optional[float] = None  # 0-1
 
 
 @router.patch("/{device_id}/heartbeat")
@@ -257,7 +260,9 @@ def device_heartbeat(
     db: Session = Depends(get_db),
     device: Device = Depends(get_device_by_api_key),
 ) -> dict:
-    """Device heartbeat — updates online status, state, and error tracking."""
+    """Device heartbeat — updates online status, state, error tracking, and stores telemetry metrics."""
+    from app.services.influxdb_metrics import metrics_db
+
     now = datetime.now(timezone.utc)
     error_changed = device.last_error != body.last_error
 
@@ -296,6 +301,15 @@ def device_heartbeat(
 
         device.last_error = body.last_error
         device.last_error_timestamp = now if body.last_error else None
+
+    # Store telemetry metrics if present
+    if any([body.throughput is not None, body.cycle_time is not None, body.error_rate is not None]):
+        metrics_db.store_metrics(
+            device_id,
+            throughput=body.throughput,
+            cycle_time=body.cycle_time,
+            error_rate=body.error_rate,
+        )
 
     db.commit()
     return {"status": "ok", "last_seen": now.isoformat()}

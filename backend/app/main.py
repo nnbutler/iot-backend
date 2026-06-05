@@ -27,8 +27,11 @@ app.include_router(metrics_router)
 @app.on_event("startup")
 async def startup_event():
     """Connect to MQTT broker and InfluxDB on startup."""
+    print("=== APP STARTUP EVENT ===", flush=True)
     mqtt_manager.connect()
+    print("MQTT connected, now connecting to InfluxDB...", flush=True)
     metrics_db.connect()
+    print("=== STARTUP COMPLETE ===", flush=True)
 
 
 @app.on_event("shutdown")

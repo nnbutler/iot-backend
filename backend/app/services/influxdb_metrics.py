@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from influxdb_client import InfluxDBClient, Point
+from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 logger = logging.getLogger(__name__)
@@ -25,16 +25,25 @@ class InfluxDBMetrics:
     def connect(self):
         """Connect to InfluxDB."""
         try:
+            print(f"[InfluxDB] Attempting to connect to {INFLUXDB_URL}", flush=True)
+            logger.info(f"Attempting to connect to InfluxDB at {INFLUXDB_URL}")
             self.client = InfluxDBClient(
                 url=INFLUXDB_URL,
                 token=INFLUXDB_TOKEN,
                 org=INFLUXDB_ORG,
             )
+            # Test the connection
+            health = self.client.health()
+            print(f"[InfluxDB] Health check: {health.status}", flush=True)
+            logger.info(f"InfluxDB health check: {health.status}")
+
             self.write_api = self.client.write_api()
             self.query_api = self.client.query_api()
-            logger.info(f"Connected to InfluxDB at {INFLUXDB_URL}")
+            print(f"[InfluxDB] ✓ Connected to {INFLUXDB_URL} (org={INFLUXDB_ORG}, bucket={INFLUXDB_BUCKET})", flush=True)
+            logger.info(f"✓ Connected to InfluxDB at {INFLUXDB_URL} (org={INFLUXDB_ORG}, bucket={INFLUXDB_BUCKET})")
         except Exception as e:
-            logger.error(f"Failed to connect to InfluxDB: {e}")
+            print(f"[InfluxDB] ✗ Failed to connect: {e}", flush=True)
+            logger.error(f"Failed to connect to InfluxDB: {e}", exc_info=True)
             self.client = None
 
     def disconnect(self):
@@ -50,47 +59,38 @@ class InfluxDBMetrics:
         cycle_time: Optional[float] = None,
         error_rate: Optional[float] = None,
     ):
-        """Store device telemetry metrics."""
+        """Store device telemetry metrics using line protocol."""
         if not self.client:
-            logger.warning("InfluxDB not connected, cannot store metrics")
+            print(f"[InfluxDB] ✗ Not connected, cannot store metrics for {device_id}", flush=True)
+            logger.warning(f"InfluxDB not connected, cannot store metrics for {device_id}")
             return
 
         try:
-            points = []
-            now = datetime.now(timezone.utc)
+            lines = []
+            now_ns = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
 
             if throughput is not None:
-                points.append(
-                    Point("device_metric")
-                    .tag("device_id", device_id)
-                    .tag("metric_type", "throughput")
-                    .field("value", throughput)
-                    .time(now)
-                )
+                lines.append(f'device_metric,device_id={device_id},metric_type=throughput value={float(throughput)} {now_ns}')
 
             if cycle_time is not None:
-                points.append(
-                    Point("device_metric")
-                    .tag("device_id", device_id)
-                    .tag("metric_type", "cycle_time")
-                    .field("value", cycle_time)
-                    .time(now)
-                )
+                lines.append(f'device_metric,device_id={device_id},metric_type=cycle_time value={float(cycle_time)} {now_ns}')
 
             if error_rate is not None:
-                points.append(
-                    Point("device_metric")
-                    .tag("device_id", device_id)
-                    .tag("metric_type", "error_rate")
-                    .field("value", error_rate)
-                    .time(now)
-                )
+                lines.append(f'device_metric,device_id={device_id},metric_type=error_rate value={float(error_rate)} {now_ns}')
 
-            if points:
-                self.write_api.write(bucket=INFLUXDB_BUCKET, records=points)
-                logger.debug(f"Stored {len(points)} metrics for {device_id}")
+            if lines:
+                try:
+                    line_protocol = '\n'.join(lines)
+                    self.write_api.write(bucket=INFLUXDB_BUCKET, org=INFLUXDB_ORG, write_precision=WritePrecision.NS, record=line_protocol)
+                    msg = f"[InfluxDB] ✓ Stored {len(lines)} metrics for {device_id}"
+                    print(msg, flush=True)
+                    logger.info(f"Stored {len(lines)} metrics for {device_id}: throughput={throughput}, cycle_time={cycle_time}, error_rate={error_rate}")
+                except Exception as write_err:
+                    print(f"[InfluxDB] ✗ Write error for {device_id}: {write_err}", flush=True)
+                    raise
         except Exception as e:
-            logger.error(f"Failed to store metrics for {device_id}: {e}")
+            print(f"[InfluxDB] ✗ Failed to store metrics for {device_id}: {e}", flush=True)
+            logger.error(f"Failed to store metrics for {device_id}: {e}", exc_info=True)
 
     def get_metrics(
         self,
@@ -108,11 +108,11 @@ class InfluxDBMetrics:
             query = f'''
             from(bucket:"{INFLUXDB_BUCKET}")
               |> range(start: {time_range})
-              |> filter(fn: (r) => r.device_id == "{device_id}")
-              |> filter(fn: (r) => r.metric_type == "{metric_type}")
+              |> filter(fn: (r) => r._field == "value" and r.device_id == "{device_id}" and r.metric_type == "{metric_type}")
               |> sort(columns: ["_time"])
             '''
 
+            print(f"[InfluxDB] Querying {device_id}/{metric_type} (last {hours}h)", flush=True)
             result = self.query_api.query(org=INFLUXDB_ORG, query=query)
 
             metrics = []
@@ -124,9 +124,11 @@ class InfluxDBMetrics:
                         "metric_type": metric_type,
                     })
 
+            print(f"[InfluxDB] Found {len(metrics)} records for {device_id}/{metric_type}", flush=True)
             return metrics
         except Exception as e:
-            logger.error(f"Failed to retrieve metrics for {device_id}: {e}")
+            print(f"[InfluxDB] ✗ Query failed for {device_id}/{metric_type}: {e}", flush=True)
+            logger.error(f"Failed to retrieve metrics for {device_id}: {e}", exc_info=True)
             return []
 
     def get_all_metrics(
