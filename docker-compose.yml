@@ -26,8 +26,8 @@ services:
       DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./backend:/app
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,10 +39,20 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    ports:
-      - "5173:5173"
+    expose:
+      - "5173"
     depends_on:
       - backend
+    restart: unless-stopped
+
+  nginx:
+    build: ./nginx
+    container_name: iot-nginx
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+      - frontend
     restart: unless-stopped
 
 volumes:
