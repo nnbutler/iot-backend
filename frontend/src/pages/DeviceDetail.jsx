@@ -48,7 +48,7 @@ function InfoRow({ label, children }) {
 export default function DeviceDetail() {
   const { device_id } = useParams()
   const [device, setDevice] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [showRepairModal, setShowRepairModal] = useState(false)
@@ -57,7 +57,6 @@ export default function DeviceDetail() {
 
   const fetchDevice = async () => {
     try {
-      setLoading(true)
       setError(null)
       const response = await client.get(`/devices/${device_id}/status`)
       setDevice(response.data)
@@ -65,11 +64,11 @@ export default function DeviceDetail() {
       console.warn('Failed to fetch from API, using mock data:', err.message)
       setDevice(MOCK_DEVICE_STATUS)
     } finally {
-      setLoading(false)
+      setInitialLoading(false)
     }
   }
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 text-center text-muted-foreground">
         Loading device...

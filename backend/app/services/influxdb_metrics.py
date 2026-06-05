@@ -256,6 +256,8 @@ class InfluxDBMetrics:
         levels: Optional[list] = None,
         limit: int = 50,
         before_timestamp: Optional[str] = None,
+        start_timestamp: Optional[str] = None,
+        end_timestamp: Optional[str] = None,
     ) -> dict:
         """Retrieve device logs from InfluxDB.
 
@@ -274,8 +276,8 @@ class InfluxDBMetrics:
 
         try:
             safe_device_id = _escape_flux_string(device_id)
-            start = "-1000d"
-            stop = f'time(v: "{before_timestamp}")' if before_timestamp else "now()"
+            start = f'time(v: "{start_timestamp}")' if start_timestamp else "-24h"
+            stop = f'time(v: "{before_timestamp}")' if before_timestamp else (f'time(v: "{end_timestamp}")' if end_timestamp else "now()")
 
             if levels:
                 level_set = "[" + ", ".join(f'"{l}"' for l in levels) + "]"

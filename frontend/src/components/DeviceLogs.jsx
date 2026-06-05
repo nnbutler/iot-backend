@@ -22,6 +22,8 @@ function LevelBadge({ level }) {
 export default function DeviceLogs({ device_id }) {
   const [logs, setLogs] = useState([])
   const [activeLevels, setActiveLevels] = useState(new Set(LEVELS))
+  const [startTime, setStartTime] = useState('')
+  const [endTime, setEndTime] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
@@ -36,9 +38,11 @@ export default function DeviceLogs({ device_id }) {
     })
   }
 
-  const fetchLogs = useCallback(async (levels, cursor = null) => {
+  const fetchLogs = useCallback(async (levels, startTime, endTime, cursor = null) => {
     const params = new URLSearchParams({ limit: 50 })
     levels.forEach(l => params.append('level', l))
+    if (startTime) params.append('start_timestamp', new Date(startTime).toISOString())
+    if (endTime) params.append('end_timestamp', new Date(endTime).toISOString())
     if (cursor) params.append('before_timestamp', cursor)
     const resp = await client.get(`/devices/${device_id}/logs?${params}`)
     return resp.data
@@ -52,7 +56,7 @@ export default function DeviceLogs({ device_id }) {
     setLogs([])
     setNextCursor(null)
 
-    fetchLogs(levels)
+    fetchLogs(levels, startTime, endTime)
       .then(data => {
         if (cancelled) return
         setLogs(data.logs)
@@ -63,13 +67,13 @@ export default function DeviceLogs({ device_id }) {
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [activeLevels, fetchLogs])
+  }, [activeLevels, startTime, endTime, fetchLogs])
 
   const loadMore = async () => {
     const levels = [...activeLevels]
     setLoadingMore(true)
     try {
-      const data = await fetchLogs(levels, nextCursor)
+      const data = await fetchLogs(levels, startTime, endTime, nextCursor)
       setLogs(prev => [...prev, ...data.logs])
       setHasMore(data.has_more)
       setNextCursor(data.next_before_timestamp)
@@ -84,7 +88,27 @@ export default function DeviceLogs({ device_id }) {
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-sm">Device Logs</CardTitle>
+          <div className="flex items-center gap-2 flex-wrap">
+            <CardTitle className="text-sm">Device Logs</CardTitle>
+            <input
+              type="datetime-local"
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+              className="h-7 text-xs px-2 rounded-md border border-input bg-background text-foreground"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <input
+              type="datetime-local"
+              value={endTime}
+              onChange={e => setEndTime(e.target.value)}
+              className="h-7 text-xs px-2 rounded-md border border-input bg-background text-foreground"
+            />
+            {(startTime || endTime) && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setStartTime(''); setEndTime('') }}>
+                Clear
+              </Button>
+            )}
+          </div>
           <div className="flex gap-1 flex-wrap items-center">
             <Button size="sm" variant="ghost" onClick={() => setActiveLevels(new Set(LEVELS))} className="h-7 text-xs px-2.5">All</Button>
             <Button size="sm" variant="ghost" onClick={() => setActiveLevels(new Set())} className="h-7 text-xs px-2.5">None</Button>
@@ -117,19 +141,19 @@ export default function DeviceLogs({ device_id }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-44 font-mono text-xs">Timestamp</TableHead>
-                  <TableHead className="w-24 text-xs">Level</TableHead>
-                  <TableHead className="text-xs">Message</TableHead>
+                  <TableHead className="w-40 font-mono text-xs h-7 px-3">Timestamp</TableHead>
+                  <TableHead className="w-20 text-xs h-7 px-3">Level</TableHead>
+                  <TableHead className="text-xs h-7 px-3">Message</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {logs.map(log => (
                   <TableRow key={log.timestamp}>
-                    <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                    <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap py-1 px-3">
                       {log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}
                     </TableCell>
-                    <TableCell><LevelBadge level={log.level} /></TableCell>
-                    <TableCell className="text-sm break-all">{log.message}</TableCell>
+                    <TableCell className="py-1 px-3"><LevelBadge level={log.level} /></TableCell>
+                    <TableCell className="text-xs break-all py-1 px-3">{log.message}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
