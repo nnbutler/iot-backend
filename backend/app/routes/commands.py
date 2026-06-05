@@ -8,6 +8,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.command import Command
 from app.models.device import Device
+from app.services.mqtt import mqtt_manager
 from app.utils.security import verify_password
 
 router = APIRouter(tags=["commands"])
@@ -87,6 +88,10 @@ def send_command(
     db.add(command)
     db.commit()
     db.refresh(command)
+
+    # Publish command to device via MQTT
+    mqtt_manager.publish_command(device_id, command.id, command.command_type)
+
     return {
         "id": command.id,
         "device_id": command.device_id,
