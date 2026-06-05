@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Float
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Text, Float
 
 from app.database import Base
 
@@ -54,7 +54,7 @@ class RepairOutcome(Base):
     device_id = Column(String(100), nullable=False)
     error_id = Column(Integer, ForeignKey("error_types.id"), nullable=False)
     repair_action_id = Column(Integer, ForeignKey("repair_actions.id"))
-    worked = Column(Integer, nullable=False)
+    worked = Column(Boolean, nullable=False)
     notes = Column(Text)
     time_spent_minutes = Column(Integer)
     attempted_by = Column(String(100))
