@@ -238,11 +238,27 @@ class RegisterResponse(BaseModel):
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 def register_device(body: RegisterRequest, db: Session = Depends(get_db)) -> RegisterResponse:
-    """Auto-register a new device. Returns the plaintext API key — shown once."""
-    if db.query(Device).filter(Device.device_id == body.device_id).first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Device '{body.device_id}' is already registered",
+    """Auto-register a new device. Returns the plaintext API key — shown once.
+
+    In DEBUG mode, re-registering an existing device rotates its API key and returns 200,
+    allowing mock devices to restart cleanly without a database wipe.
+    """
+    from app.config import settings
+    existing = db.query(Device).filter(Device.device_id == body.device_id).first()
+    if existing:
+        if not settings.DEBUG:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Device '{body.device_id}' is already registered",
+            )
+        # DEBUG: rotate API key so device can restart without a DB wipe
+        api_key = secrets.token_urlsafe(32)
+        existing.api_key = hash_password(api_key)
+        db.commit()
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"device_id": existing.device_id, "api_key": api_key},
         )
 
     api_key = secrets.token_urlsafe(32)
