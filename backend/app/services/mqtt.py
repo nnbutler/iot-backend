@@ -62,9 +62,8 @@ class MQTTManager:
         if rc == 0:
             self.connected = True
             logger.info("MQTT connected successfully")
-            # Subscribe to all device topics
+            # Subscribe to device topics (logs are handled by Telegraf)
             client.subscribe("devices/+/heartbeat")
-            client.subscribe("devices/+/logs")
             client.subscribe("devices/+/command-result/+")
         else:
             logger.error(f"MQTT connection failed with code {rc}")
@@ -90,8 +89,6 @@ class MQTTManager:
 
             if message_type == "heartbeat":
                 self._handle_heartbeat(device_id, msg.payload)
-            elif message_type == "logs":
-                self._handle_logs(device_id, msg.payload)
             elif message_type == "command-result":
                 command_id = topic_parts[3] if len(topic_parts) > 3 else None
                 if command_id:
@@ -112,7 +109,6 @@ class MQTTManager:
 
                 # Update device status
                 from datetime import datetime, timezone
-                from app.services.influxdb_metrics import metrics_db
 
                 now = datetime.now(timezone.utc)
 
@@ -175,31 +171,6 @@ class MQTTManager:
             logger.error(f"Invalid JSON in heartbeat payload: {payload}")
         except Exception as e:
             logger.error(f"Error processing heartbeat for {device_id}: {e}")
-
-    def _handle_logs(self, device_id: str, payload: bytes):
-        """Process device logs."""
-        try:
-            logger.debug(f"_handle_logs called for {device_id}")
-            data = json.loads(payload.decode())
-            db = self._get_db()
-            try:
-                device = db.query(Device).filter(Device.device_id == device_id).first()
-                if not device:
-                    logger.warning(f"Received log from unknown device: {device_id}")
-                    return
-
-                level = data.get("level", "INFO")
-                message = data.get("message", "")
-                logger.info(f"Storing log for {device_id} [{level}]: {message[:50]}")
-
-                metrics_db.store_log(device_id, level, message)
-                logger.info(f"✓ Log stored for {device_id}")
-            finally:
-                db.close()
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON in log payload: {payload}")
-        except Exception as e:
-            logger.error(f"Error processing log for {device_id}: {e}", exc_info=True)
 
     def _handle_command_result(self, device_id: str, command_id: str, payload: bytes):
         """Process command execution result from device."""

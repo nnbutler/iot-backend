@@ -79,6 +79,19 @@ services:
       retries: 5
     restart: unless-stopped
 
+  telegraf:
+    image: telegraf:latest
+    container_name: iot-telegraf
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    depends_on:
+      - mosquitto
+      - influxdb
+    environment:
+      INFLUXDB_TOKEN: device-manager-token
+      INFLUXDB_ORG: iot
+    restart: unless-stopped
+
   nginx:
     build: ./nginx
     container_name: iot-nginx

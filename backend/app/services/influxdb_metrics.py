@@ -247,31 +247,6 @@ class InfluxDBMetrics:
             logger.error(f"Failed to get latest metric for {device_id}: {e}")
             return None
 
-    def store_log(self, device_id: str, level: str, message: str) -> None:
-        """Store a device log in InfluxDB.
-
-        Args:
-            device_id: Device ID
-            level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-            message: Log message content
-        """
-        if not self.client:
-            logger.warning(f"InfluxDB not connected, cannot store log for {device_id}")
-            return
-
-        try:
-            ts_ns = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
-            escaped_device_id = _escape_tag(device_id)
-            escaped_msg = message.replace("\\", "\\\\").replace('"', '\\"')
-            line = f'device_log,device_id={escaped_device_id},level={level} message="{escaped_msg}" {ts_ns}'
-            print(f"[InfluxDB] Writing log line protocol: {line[:100]}", flush=True)
-            self.write_api.write(bucket=INFLUXDB_LOG_BUCKET, org=INFLUXDB_ORG, write_precision=WritePrecision.NS, record=line)
-            print(f"[InfluxDB] ✓ Stored log for {device_id} [{level}]", flush=True)
-            logger.info(f"Stored log for {device_id} [{level}]: {message[:50]}")
-        except Exception as e:
-            print(f"[InfluxDB] ✗ Failed to store log for {device_id}: {e}", flush=True)
-            logger.error(f"Failed to store log for {device_id}: {e}", exc_info=True)
-
     def get_logs(
         self,
         device_id: str,

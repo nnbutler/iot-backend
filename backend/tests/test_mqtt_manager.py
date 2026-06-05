@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from app.models.command import Command
-from app.models.device import Device, DeviceErrorHistory, DeviceLog
+from app.models.device import Device, DeviceErrorHistory
 from app.models.error import ErrorType
 from app.services.mqtt import MQTTManager
 
@@ -99,7 +99,6 @@ def test_on_connect_handler(mqtt_manager):
 
     assert mqtt_manager.connected is True
     mqtt_manager.client.subscribe.assert_any_call("devices/+/heartbeat")
-    mqtt_manager.client.subscribe.assert_any_call("devices/+/logs")
     mqtt_manager.client.subscribe.assert_any_call("devices/+/command-result/+")
 
 
@@ -236,69 +235,6 @@ def test_handle_heartbeat_partial_data(mqtt_manager, db_session, registered_devi
 
     device = db_session.query(Device).filter(Device.device_id == "mqtt-test-01").first()
     assert device.online is False
-
-
-# ─── Log Message Tests ────────────────────────────────────────────────────────
-
-
-def test_handle_logs_creates_device_log(mqtt_manager, db_session, registered_device):
-    """Test logs are stored in database."""
-    mqtt_manager.db_session_factory = MagicMock()
-    mqtt_manager.db_session_factory.return_value = db_session
-
-    log = {
-        "level": "WARNING",
-        "message": "Sensor reading unstable",
-    }
-
-    mqtt_manager._handle_logs("mqtt-test-01", json.dumps(log).encode())
-
-    db_session.expire_all()
-    device_log = (
-        db_session.query(DeviceLog)
-        .filter(DeviceLog.device_id == "mqtt-test-01")
-        .first()
-    )
-    assert device_log is not None
-    assert device_log.level == "WARNING"
-    assert device_log.message == "Sensor reading unstable"
-
-
-def test_handle_logs_default_level(mqtt_manager, db_session, registered_device):
-    """Test logs with missing level default to INFO."""
-    mqtt_manager.db_session_factory = MagicMock()
-    mqtt_manager.db_session_factory.return_value = db_session
-
-    log = {"message": "Something happened"}
-    mqtt_manager._handle_logs("mqtt-test-01", json.dumps(log).encode())
-
-    db_session.expire_all()
-    device_log = (
-        db_session.query(DeviceLog)
-        .filter(DeviceLog.device_id == "mqtt-test-01")
-        .first()
-    )
-    assert device_log.level == "INFO"
-
-
-def test_handle_logs_unknown_device_ignored(mqtt_manager, db_session):
-    """Test logs from unknown device are ignored."""
-    mqtt_manager.db_session_factory = MagicMock()
-    mqtt_manager.db_session_factory.return_value = db_session
-
-    log = {"level": "ERROR", "message": "Test"}
-    # Should not raise
-    mqtt_manager._handle_logs("unknown-device", json.dumps(log).encode())
-
-
-def test_handle_logs_invalid_json(mqtt_manager, db_session):
-    """Test logs with invalid JSON handled gracefully."""
-    mqtt_manager.db_session_factory = MagicMock()
-    mqtt_manager.db_session_factory.return_value = db_session
-
-    # Should not raise
-    mqtt_manager._handle_logs("mqtt-test-01", b"{invalid json")
-
 
 # ─── Command Result Tests ─────────────────────────────────────────────────────
 
@@ -452,21 +388,6 @@ def test_on_message_heartbeat_topic(mqtt_manager, db_session, registered_device)
 
     device = db_session.query(Device).filter(Device.device_id == "mqtt-test-01").first()
     assert device.online is True
-
-
-def test_on_message_logs_topic(mqtt_manager, db_session, registered_device):
-    """Test on_message routes log messages."""
-    mqtt_manager.db_session_factory = MagicMock()
-    mqtt_manager.db_session_factory.return_value = db_session
-
-    msg = MagicMock()
-    msg.topic = "devices/mqtt-test-01/logs"
-    msg.payload = json.dumps({"level": "INFO", "message": "Test"}).encode()
-
-    mqtt_manager._on_message(mqtt_manager.client, None, msg)
-
-    log = db_session.query(DeviceLog).filter(DeviceLog.device_id == "mqtt-test-01").first()
-    assert log is not None
 
 
 def test_on_message_command_result_topic(mqtt_manager, db_session, registered_device):
