@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import settings
 from app.database import Base
 from app.models.command import Command
-from app.models.device import Device, DeviceLog, DeviceErrorHistory
+from app.models.device import Device, DeviceErrorHistory
 from app.models.error import ErrorType
+from app.services.influxdb_metrics import metrics_db
 
 logger = logging.getLogger(__name__)
 
@@ -189,9 +190,7 @@ class MQTTManager:
                 level = data.get("level", "INFO")
                 message = data.get("message", "")
 
-                db.add(DeviceLog(device_id=device_id, level=level, message=message))
-                db.commit()
-                logger.debug(f"Log recorded for {device_id} [{level}]: {message[:50]}")
+                metrics_db.store_log(device_id, level, message)
             finally:
                 db.close()
         except json.JSONDecodeError:

@@ -11,11 +11,12 @@ logger = logging.getLogger(__name__)
 INFLUXDB_URL = "http://influxdb:8086"
 INFLUXDB_ORG = "iot"
 INFLUXDB_BUCKET = "device_metrics"
+INFLUXDB_LOG_BUCKET = "device_logs"
 INFLUXDB_TOKEN = "device-manager-token"
 
 
 def _escape_flux_string(value: str) -> str:
-    """Escape a string for safe interpolation into Flux queries.
+    r"""Escape a string for safe interpolation into Flux queries.
 
     In Flux, strings are double-quoted and require backslash escaping of:
     - Backslashes (\)
@@ -34,6 +35,17 @@ def _escape_flux_string(value: str) -> str:
     result = result.replace("\r", "\\r")
     result = result.replace("\t", "\\t")
     return result
+
+
+def _escape_tag(value: str) -> str:
+    """Escape a string for use as a tag key or value in line protocol.
+
+    Tag keys and values must not contain spaces, commas, or equals signs.
+    This prevents malformed line protocol.
+    """
+    if not isinstance(value, str):
+        value = str(value)
+    return value.replace(",", "\\,").replace(" ", "\\ ").replace("=", "\\=")
 
 
 class InfluxDBMetrics:
@@ -212,6 +224,91 @@ class InfluxDBMetrics:
         except Exception as e:
             logger.error(f"Failed to get latest metric for {device_id}: {e}")
             return None
+
+    def store_log(self, device_id: str, level: str, message: str) -> None:
+        """Store a device log in InfluxDB.
+
+        Args:
+            device_id: Device ID
+            level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            message: Log message content
+        """
+        if not self.client:
+            logger.warning(f"InfluxDB not connected, cannot store log for {device_id}")
+            return
+
+        try:
+            ts_ns = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
+            escaped_device_id = _escape_tag(device_id)
+            escaped_msg = message.replace("\\", "\\\\").replace('"', '\\"')
+            line = f'device_log,device_id={escaped_device_id},level={level} message="{escaped_msg}" {ts_ns}'
+            self.write_api.write(bucket=INFLUXDB_LOG_BUCKET, org=INFLUXDB_ORG, write_precision=WritePrecision.NS, record=line)
+            logger.debug(f"Stored log for {device_id} [{level}]: {message[:50]}")
+        except Exception as e:
+            logger.error(f"Failed to store log for {device_id}: {e}", exc_info=True)
+
+    def get_logs(
+        self,
+        device_id: str,
+        level: Optional[str] = None,
+        limit: int = 50,
+        before_timestamp: Optional[str] = None,
+    ) -> dict:
+        """Retrieve device logs from InfluxDB.
+
+        Args:
+            device_id: Device ID
+            level: Filter by severity level (optional)
+            limit: Maximum number of logs to return
+            before_timestamp: ISO 8601 timestamp cursor for pagination
+
+        Returns:
+            Dict with keys: logs (list), has_more (bool), next_before_timestamp (str or None)
+        """
+        if not self.client:
+            logger.warning(f"InfluxDB not connected, cannot retrieve logs for {device_id}")
+            return {"logs": [], "has_more": False, "next_before_timestamp": None}
+
+        try:
+            safe_device_id = _escape_flux_string(device_id)
+            start = "-1000d"
+            stop = f'time(v: "{before_timestamp}")' if before_timestamp else "now()"
+
+            level_filter = f'and r.level == "{level}"' if level else ""
+
+            query = f'''
+            from(bucket:"{INFLUXDB_LOG_BUCKET}")
+              |> range(start: {start}, stop: {stop})
+              |> filter(fn: (r) => r.device_id == "{safe_device_id}" {level_filter})
+              |> sort(columns: ["_time"], desc: true)
+              |> limit(n: {limit + 1})
+            '''
+
+            result = self.query_api.query(org=INFLUXDB_ORG, query=query)
+
+            logs = []
+            for table in result:
+                for record in table.records:
+                    logs.append({
+                        "level": record.values.get("level"),
+                        "message": record.get_value(),
+                        "timestamp": record.get_time().isoformat(),
+                    })
+
+            has_more = len(logs) > limit
+            if has_more:
+                logs = logs[:limit]
+            next_before_timestamp = logs[-1]["timestamp"] if logs and has_more else None
+
+            logger.debug(f"Retrieved {len(logs)} logs for {device_id} (level={level})")
+            return {
+                "logs": logs,
+                "has_more": has_more,
+                "next_before_timestamp": next_before_timestamp,
+            }
+        except Exception as e:
+            logger.error(f"Failed to retrieve logs for {device_id}: {e}", exc_info=True)
+            return {"logs": [], "has_more": False, "next_before_timestamp": None}
 
 
 # Global metrics instance

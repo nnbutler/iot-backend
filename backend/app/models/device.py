@@ -29,22 +29,6 @@ class Device(Base):
         return f"<Device(id={self.id}, device_id={self.device_id}, online={self.online})>"
 
 
-class DeviceLog(Base):
-    """Device log model."""
-
-    __tablename__ = "device_logs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    device_id = Column(String(100), nullable=False, index=True)
-    level = Column(String(20))
-    message = Column(Text)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    def __repr__(self) -> str:
-        return f"<DeviceLog(id={self.id}, device_id={self.device_id}, level={self.level})>"
-
-
 class DeviceErrorHistory(Base):
     """Device error history model."""
 
