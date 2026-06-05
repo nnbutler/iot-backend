@@ -5,6 +5,7 @@ import { formatDate, formatStatus, formatSeverity } from '../utils/formatting'
 import ErrorMessage from '../components/ErrorMessage'
 import SendCommandModal from '../components/SendCommandModal'
 import RepairOutcomeModal from '../components/RepairOutcomeModal'
+import DeviceLogs from '../components/DeviceLogs'
 
 const MOCK_DEVICE_STATUS = {
   device_id: 'plc-001',
@@ -208,6 +209,10 @@ export default function DeviceDetail() {
           </div>
         </div>
       )}
+
+      <div className="mt-6">
+        <DeviceLogs device_id={device.device_id} />
+      </div>
 
       {/* Modals */}
       {showCommandModal && (
