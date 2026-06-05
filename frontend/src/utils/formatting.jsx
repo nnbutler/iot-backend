@@ -1,3 +1,17 @@
+export function formatUptime(onlineSince) {
+  if (!onlineSince) return null
+  const seconds = Math.floor((Date.now() - new Date(onlineSince)) / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (hours < 24) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const hrs = hours % 24
+  return hrs > 0 ? `${days}d ${hrs}h` : `${days}d`
+}
+
 export function formatDate(dateString) {
   if (!dateString) return 'N/A'
   try {

@@ -17,6 +17,7 @@ class Device(Base):
     location = Column(String(255))
     customer_name = Column(String(255), index=True)
     online = Column(Boolean, default=False, index=True)
+    online_since = Column(DateTime, nullable=True)
     last_seen = Column(DateTime)
     last_error = Column(String(255))
     last_error_timestamp = Column(DateTime)

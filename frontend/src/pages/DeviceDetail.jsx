@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import client from '../api/client'
-import { formatDate } from '../utils/formatting'
+import { formatDate, formatUptime } from '../utils/formatting'
 import ErrorMessage from '../components/ErrorMessage'
 import SendCommandModal from '../components/SendCommandModal'
 import RepairOutcomeModal from '../components/RepairOutcomeModal'
@@ -92,9 +92,15 @@ export default function DeviceDetail() {
           <Link to="/devices"><ArrowLeft className="h-4 w-4 mr-1" />Devices</Link>
         </Button>
         <h1 className="text-2xl font-semibold tracking-tight font-mono">{device.device_id}</h1>
-        <Badge variant={device.online ? 'success' : 'secondary'}>
-          {device.online ? 'Online' : 'Offline'}
-        </Badge>
+        {(() => {
+          const since = device.online ? device.online_since : device.last_seen
+          const duration = since ? ` · ${formatUptime(since)}` : ''
+          return (
+            <Badge variant={device.online ? 'success' : 'secondary'}>
+              {device.online ? 'Online' : 'Offline'}{duration}
+            </Badge>
+          )
+        })()}
       </div>
 
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}

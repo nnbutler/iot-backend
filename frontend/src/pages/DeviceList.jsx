@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
-import { formatDate } from '../utils/formatting'
+import { formatUptime } from '../utils/formatting'
 import ErrorMessage from '../components/ErrorMessage'
 import MqttDebug from '../components/MqttDebug'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,10 +12,11 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/button'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
-function StatusBadge({ online }) {
+function StatusBadge({ online, since }) {
+  const duration = since ? ` · ${formatUptime(since)}` : ''
   return online
-    ? <Badge variant="success">Online</Badge>
-    : <Badge variant="secondary">Offline</Badge>
+    ? <Badge variant="success">Online{duration}</Badge>
+    : <Badge variant="secondary">Offline{duration}</Badge>
 }
 
 export default function DeviceList() {
@@ -161,8 +162,6 @@ export default function DeviceList() {
                     { label: 'Location', field: 'location' },
                     { label: 'Status', field: 'online' },
                     { label: 'Last Error', field: 'last_error' },
-                    { label: 'Last Seen', field: 'last_seen' },
-                    { label: 'Uptime', field: 'uptime_percent' },
                   ].map(({ label, field }) => (
                     <TableHead key={field}>
                       <button
@@ -179,7 +178,7 @@ export default function DeviceList() {
               <TableBody>
                 {devices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
                       No devices found
                     </TableCell>
                   </TableRow>
@@ -189,15 +188,16 @@ export default function DeviceList() {
                       <TableCell className="font-mono text-sm">{device.device_id}</TableCell>
                       <TableCell className="text-sm">{device.customer_name || '—'}</TableCell>
                       <TableCell className="text-sm">{device.location || '—'}</TableCell>
-                      <TableCell><StatusBadge online={device.online} /></TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          online={device.online}
+                          since={device.online ? device.online_since : device.last_seen}
+                        />
+                      </TableCell>
                       <TableCell className="text-sm">
                         {device.last_error
                           ? <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{device.last_error}</code>
                           : <span className="text-muted-foreground">—</span>}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{formatDate(device.last_seen)}</TableCell>
-                      <TableCell className="text-sm">
-                        {device.uptime_percent ? `${device.uptime_percent}%` : '—'}
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" asChild>

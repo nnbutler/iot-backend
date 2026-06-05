@@ -164,6 +164,7 @@ def list_devices(
                 "customer_name": d.customer_name,
                 "location": d.location,
                 "online": d.online,
+                "online_since": _as_utc(d.online_since).isoformat() if d.online_since else None,
                 "last_seen": _as_utc(d.last_seen).isoformat() if d.last_seen else None,
                 "last_error": d.last_error,
                 "uptime_percent": _compute_uptime(d.device_id, errors_by_device.get(d.device_id, [])),
@@ -209,6 +210,7 @@ def device_status(
     return {
         "device_id": device.device_id,
         "online": device.online,
+        "online_since": _as_utc(device.online_since).isoformat() if device.online_since else None,
         "last_seen": _as_utc(device.last_seen).isoformat() if device.last_seen else None,
         "state": device.state,
         "firmware_version": device.firmware_version,
@@ -298,9 +300,14 @@ def device_heartbeat(
 
     now = datetime.now(timezone.utc)
     error_changed = device.last_error != body.last_error
+    was_online = device.online
 
     device.online = body.online
     device.last_seen = now
+    if body.online and not was_online:
+        device.online_since = now
+    elif not body.online:
+        device.online_since = None
     if body.state is not None:
         device.state = body.state
     if body.firmware_version is not None:
