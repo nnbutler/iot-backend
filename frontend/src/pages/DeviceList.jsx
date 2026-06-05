@@ -1,22 +1,32 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
-import { formatDate, formatStatus } from '../utils/formatting'
+import { formatDate } from '../utils/formatting'
 import ErrorMessage from '../components/ErrorMessage'
 import MqttDebug from '../components/MqttDebug'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+
+function StatusBadge({ online }) {
+  return online
+    ? <Badge variant="success">Online</Badge>
+    : <Badge variant="secondary">Offline</Badge>
+}
 
 export default function DeviceList() {
   const [tab, setTab] = useState('devices')
   const [devices, setDevices] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Filter state
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [errorFilter, setErrorFilter] = useState('all')
-
-  // Sort state
   const [sortBy, setSortBy] = useState('device_id')
   const [sortOrder, setSortOrder] = useState('asc')
 
@@ -26,16 +36,13 @@ export default function DeviceList() {
 
   const fetchDevices = async () => {
     try {
-      setLoading(true)
       setError(null)
-
       const params = new URLSearchParams()
       if (search) params.append('search', search)
       if (statusFilter !== 'all') params.append('online', statusFilter === 'online')
       if (errorFilter !== 'all') params.append('has_error', errorFilter === 'error')
       params.append('sort_by', sortBy)
       params.append('sort_order', sortOrder)
-
       const response = await client.get(`/devices?${params.toString()}`)
       setDevices(response.data.devices || response.data)
     } catch (err) {
@@ -43,183 +50,168 @@ export default function DeviceList() {
       setError('Failed to load devices')
       setDevices([])
     } finally {
-      setLoading(false)
+      setInitialLoading(false)
     }
   }
 
   const handleSort = (field) => {
     if (sortBy === field) {
-      // Toggle order if same field clicked
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
     } else {
-      // New field, start with asc
       setSortBy(field)
       setSortOrder('asc')
     }
   }
 
   const SortIcon = ({ field }) => {
-    if (sortBy !== field) return <span className="text-gray-300">⇅</span>
-    return sortOrder === 'asc' ? <span className="text-blue-600">↑</span> : <span className="text-blue-600">↓</span>
+    if (sortBy !== field) return <ArrowUpDown className="ml-1 h-3.5 w-3.5 text-muted-foreground/50 inline" />
+    return sortOrder === 'asc'
+      ? <ArrowUp className="ml-1 h-3.5 w-3.5 text-primary inline" />
+      : <ArrowDown className="ml-1 h-3.5 w-3.5 text-primary inline" />
   }
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="text-center text-gray-600">Loading devices...</div>
+        <div className="text-center text-muted-foreground">Loading devices...</div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-3xl font-bold">Devices</h1>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {['devices', 'debug'].map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors capitalize ${
-                  tab === t
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {t === 'debug' ? 'MQTT Debug' : 'Devices'}
-              </button>
-            ))}
-          </div>
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
+        <div className="flex gap-1 bg-muted rounded-lg p-1">
+          {['devices', 'debug'].map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                tab === t
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t === 'debug' ? 'MQTT Debug' : 'Devices'}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {tab === 'debug' && <MqttDebug />}
+      {tab === 'debug' && <MqttDebug />}
 
-        {/* Filters */}
-        {tab === 'devices' && <div className="bg-white rounded-lg shadow p-4 mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Device ID, customer, location..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+      {tab === 'devices' && (
+        <>
+          {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All</option>
-                <option value="online">Online</option>
-                <option value="offline">Offline</option>
-              </select>
-            </div>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Search</label>
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Device ID, customer, location…"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Errors</label>
-              <select
-                value={errorFilter}
-                onChange={(e) => setErrorFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All</option>
-                <option value="error">With Error</option>
-                <option value="healthy">Healthy</option>
-              </select>
-            </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Status</label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="online">Online</SelectItem>
+                      <SelectItem value="offline">Offline</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Results</label>
-              <div className="py-2 px-3 bg-gray-100 rounded-lg text-sm text-gray-700">
-                {devices.length} device{devices.length !== 1 ? 's' : ''}
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Errors</label>
+                  <Select value={errorFilter} onValueChange={setErrorFilter}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="error">With Error</SelectItem>
+                      <SelectItem value="healthy">Healthy</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Results</label>
+                  <div className="flex h-9 items-center px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground">
+                    {devices.length} device{devices.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>}
-      </div>
+            </CardContent>
+          </Card>
 
-      {tab === 'devices' && <>
-      {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
-
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
-        <table className="w-full">
-          <thead className="bg-gray-100 border-b border-gray-200">
-            <tr>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('device_id')}>
-                Device ID <SortIcon field="device_id" />
-              </th>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('customer_name')}>
-                Customer <SortIcon field="customer_name" />
-              </th>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('location')}>
-                Location <SortIcon field="location" />
-              </th>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('online')}>
-                Status <SortIcon field="online" />
-              </th>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('last_error')}>
-                Last Error <SortIcon field="last_error" />
-              </th>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('last_seen')}>
-                Last Seen <SortIcon field="last_seen" />
-              </th>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('uptime_percent')}>
-                Uptime <SortIcon field="uptime_percent" />
-              </th>
-              <th className="text-left px-6 py-3 font-semibold text-gray-700">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {devices.length === 0 ? (
-              <tr>
-                <td colSpan="8" className="px-6 py-8 text-center text-gray-600">
-                  No devices found
-                </td>
-              </tr>
-            ) : (
-              devices.map((device) => (
-                <tr key={device.device_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-mono text-sm">{device.device_id}</td>
-                  <td className="px-6 py-4 text-sm">{device.customer_name || 'N/A'}</td>
-                  <td className="px-6 py-4 text-sm">{device.location || 'N/A'}</td>
-                  <td className="px-6 py-4">
-                    {formatStatus(device.online)}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    {device.last_error ? (
-                      <code className="bg-gray-100 px-2 py-1 rounded text-xs">
-                        {device.last_error}
-                      </code>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm">{formatDate(device.last_seen)}</td>
-                  <td className="px-6 py-4 text-sm">
-                    {device.uptime_percent ? `${device.uptime_percent}%` : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <Link
-                      to={`/devices/${device.device_id}`}
-                      className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                    >
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-      </>}
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {[
+                    { label: 'Device ID', field: 'device_id' },
+                    { label: 'Customer', field: 'customer_name' },
+                    { label: 'Location', field: 'location' },
+                    { label: 'Status', field: 'online' },
+                    { label: 'Last Error', field: 'last_error' },
+                    { label: 'Last Seen', field: 'last_seen' },
+                    { label: 'Uptime', field: 'uptime_percent' },
+                  ].map(({ label, field }) => (
+                    <TableHead key={field}>
+                      <button
+                        onClick={() => handleSort(field)}
+                        className="flex items-center font-medium text-foreground hover:text-primary transition-colors"
+                      >
+                        {label}<SortIcon field={field} />
+                      </button>
+                    </TableHead>
+                  ))}
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {devices.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                      No devices found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  devices.map((device) => (
+                    <TableRow key={device.device_id}>
+                      <TableCell className="font-mono text-sm">{device.device_id}</TableCell>
+                      <TableCell className="text-sm">{device.customer_name || '—'}</TableCell>
+                      <TableCell className="text-sm">{device.location || '—'}</TableCell>
+                      <TableCell><StatusBadge online={device.online} /></TableCell>
+                      <TableCell className="text-sm">
+                        {device.last_error
+                          ? <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{device.last_error}</code>
+                          : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatDate(device.last_seen)}</TableCell>
+                      <TableCell className="text-sm">
+                        {device.uptime_percent ? `${device.uptime_percent}%` : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link to={`/devices/${device.device_id}`}>View</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+        </>
+      )}
     </div>
   )
 }
