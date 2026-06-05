@@ -71,7 +71,7 @@ class InfluxDBMetrics:
             print(f"[InfluxDB] Health check: {health.status}", flush=True)
             logger.info(f"InfluxDB health check: {health.status}")
 
-            self.write_api = self.client.write_api(write_client=SYNCHRONOUS)
+            self.write_api = self.client.write_api(SYNCHRONOUS)
             self.query_api = self.client.query_api()
 
             # Ensure buckets exist
@@ -91,12 +91,15 @@ class InfluxDBMetrics:
 
         try:
             buckets_api = self.client.buckets_api()
-            existing_buckets = {b.name for b in buckets_api.find_buckets()}
+            buckets_result = buckets_api.find_buckets()
+            existing_buckets = {b.name for b in buckets_result.buckets} if buckets_result.buckets else set()
+
+            orgs_api = self.client.organizations_api()
+            org = next((o for o in orgs_api.find_organizations() if o.name == INFLUXDB_ORG), None)
 
             for bucket_name in [INFLUXDB_BUCKET, INFLUXDB_LOG_BUCKET]:
                 if bucket_name not in existing_buckets:
-                    from influxdb_client.client.write_api import SYNCHRONOUS
-                    buckets_api.create_bucket(bucket_name=bucket_name, org=INFLUXDB_ORG)
+                    buckets_api.create_bucket(bucket_name=bucket_name, org_id=org.id if org else None)
                     print(f"[InfluxDB] ✓ Created bucket: {bucket_name}", flush=True)
                     logger.info(f"Created bucket: {bucket_name}")
         except Exception as e:
@@ -274,12 +277,15 @@ class InfluxDBMetrics:
             start = "-1000d"
             stop = f'time(v: "{before_timestamp}")' if before_timestamp else "now()"
 
-            level_filter = f'and r.level == "{level}"' if level else ""
+            level_filter = f'|> filter(fn: (r) => r.level == "{level}")' if level else ""
 
             query = f'''
             from(bucket:"{INFLUXDB_LOG_BUCKET}")
               |> range(start: {start}, stop: {stop})
-              |> filter(fn: (r) => r.device_id == "{safe_device_id}" {level_filter})
+              |> filter(fn: (r) => r._measurement == "device_log")
+              |> filter(fn: (r) => r._field == "message")
+              |> filter(fn: (r) => r.device_id == "{safe_device_id}")
+              {level_filter}
               |> sort(columns: ["_time"], desc: true)
               |> limit(n: {limit + 1})
             '''
