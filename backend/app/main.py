@@ -1,8 +1,11 @@
+import asyncio
+
 from fastapi import FastAPI
 
 from app.config import settings
 from app.routes.auth import router as auth_router
 from app.routes.commands import router as commands_router
+from app.routes.debug import router as debug_router
 from app.routes.devices import router as devices_router
 from app.routes.errors import router as errors_router
 from app.routes.health import router as health_router
@@ -24,12 +27,14 @@ app.include_router(errors_router)
 app.include_router(commands_router)
 app.include_router(logs_router)
 app.include_router(metrics_router)
+app.include_router(debug_router)
 
 
 @app.on_event("startup")
 async def startup_event():
     """Connect to MQTT broker and InfluxDB on startup."""
     print("=== APP STARTUP EVENT ===", flush=True)
+    mqtt_manager.set_event_loop(asyncio.get_event_loop())
     mqtt_manager.connect()
     print("MQTT connected, now connecting to InfluxDB...", flush=True)
     metrics_db.connect()

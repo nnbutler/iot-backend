@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import client from '../api/client'
 import { formatDate, formatStatus } from '../utils/formatting'
 import ErrorMessage from '../components/ErrorMessage'
+import MqttDebug from '../components/MqttDebug'
 
 export default function DeviceList() {
+  const [tab, setTab] = useState('devices')
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -72,10 +74,29 @@ export default function DeviceList() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-4">Devices</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold">Devices</h1>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {['devices', 'debug'].map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors capitalize ${
+                  tab === t
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {t === 'debug' ? 'MQTT Debug' : 'Devices'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {tab === 'debug' && <MqttDebug />}
 
         {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-4">
+        {tab === 'devices' && <div className="bg-white rounded-lg shadow p-4 mb-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
@@ -121,9 +142,10 @@ export default function DeviceList() {
               </div>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
 
+      {tab === 'devices' && <>
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
       <div className="overflow-x-auto bg-white rounded-lg shadow">
@@ -197,6 +219,7 @@ export default function DeviceList() {
           </tbody>
         </table>
       </div>
+      </>}
     </div>
   )
 }

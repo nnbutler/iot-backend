@@ -1,4 +1,5 @@
 """MQTT service for device-to-backend communication."""
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -28,6 +29,11 @@ class MQTTManager:
         self.client: Optional[mqtt.Client] = None
         self.connected = False
         self.db_session_factory: Optional[sessionmaker] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Store the running asyncio loop so MQTT thread can schedule broadcasts."""
+        self._loop = loop
 
     def _get_db(self) -> Session:
         """Get a database session for message processing."""
@@ -62,9 +68,10 @@ class MQTTManager:
         if rc == 0:
             self.connected = True
             logger.info("MQTT connected successfully")
-            # Subscribe to device topics (logs are handled by Telegraf)
+            # Subscribe to all device topics for debug visibility; logs stored by Telegraf
             client.subscribe("devices/+/heartbeat")
             client.subscribe("devices/+/command-result/+")
+            client.subscribe("devices/+/logs")
         else:
             logger.error(f"MQTT connection failed with code {rc}")
 
@@ -79,6 +86,14 @@ class MQTTManager:
     def _on_message(self, client, userdata, msg):
         """Handle incoming MQTT messages."""
         try:
+            # Broadcast raw message to any connected debug WebSocket clients
+            if self._loop and self._loop.is_running():
+                from app.routes.debug import broadcast
+                payload_str = msg.payload.decode(errors="replace")
+                asyncio.run_coroutine_threadsafe(
+                    broadcast(msg.topic, payload_str), self._loop
+                )
+
             topic_parts = msg.topic.split("/")
             if len(topic_parts) < 3:
                 logger.warning(f"Invalid topic format: {msg.topic}")
