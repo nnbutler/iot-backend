@@ -11,6 +11,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, get_device_by_api_key
 from app.models.device import Device, DeviceErrorHistory
 from app.models.error import ErrorType, RepairAction
+from app.models.organization import Organization, Site
 from app.utils.security import hash_password
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -157,6 +158,17 @@ def list_devices(
             errors_by_device[error.device_id] = []
         errors_by_device[error.device_id].append(error)
 
+    # Fetch sites and orgs for devices that have site_id
+    site_ids = {d.site_id for d in devices if d.site_id}
+    sites_map: dict = {}
+    orgs_map: dict = {}
+    if site_ids:
+        sites = db.query(Site).filter(Site.id.in_(site_ids)).all()
+        org_ids = {s.organization_id for s in sites}
+        orgs = db.query(Organization).filter(Organization.id.in_(org_ids)).all()
+        orgs_map = {o.id: o for o in orgs}
+        sites_map = {s.id: (s, orgs_map.get(s.organization_id)) for s in sites}
+
     return {
         "devices": [
             {
@@ -168,6 +180,10 @@ def list_devices(
                 "last_seen": _as_utc(d.last_seen).isoformat() if d.last_seen else None,
                 "last_error": d.last_error,
                 "uptime_percent": _compute_uptime(d.device_id, errors_by_device.get(d.device_id, [])),
+                "site_id": d.site_id,
+                "site_nickname": sites_map[d.site_id][0].nickname if d.site_id and d.site_id in sites_map else None,
+                "organization_id": sites_map[d.site_id][1].id if d.site_id and d.site_id in sites_map and sites_map[d.site_id][1] else None,
+                "organization_name": sites_map[d.site_id][1].name if d.site_id and d.site_id in sites_map and sites_map[d.site_id][1] else None,
             }
             for d in devices
         ]
@@ -207,6 +223,9 @@ def device_status(
             "occurred_at": occurred_at,
         }
 
+    site = db.query(Site).filter(Site.id == device.site_id).first() if device.site_id else None
+    org = db.query(Organization).filter(Organization.id == site.organization_id).first() if site else None
+
     return {
         "device_id": device.device_id,
         "online": device.online,
@@ -219,6 +238,10 @@ def device_status(
         "device_type": device.device_type,
         "last_error": last_error_detail,
         "troubleshooting": _get_troubleshooting(device.last_error, db) if device.last_error else None,
+        "site_id": device.site_id,
+        "site_nickname": site.nickname if site else None,
+        "organization_id": org.id if org else None,
+        "organization_name": org.name if org else None,
     }
 
 

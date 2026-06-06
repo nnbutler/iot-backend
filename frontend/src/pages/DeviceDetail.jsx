@@ -5,11 +5,12 @@ import { formatDate, formatUptime } from '../utils/formatting'
 import ErrorMessage from '../components/ErrorMessage'
 import SendCommandModal from '../components/SendCommandModal'
 import RepairOutcomeModal from '../components/RepairOutcomeModal'
+import AssignSiteModal from '../components/AssignSiteModal'
 import DeviceLogs from '../components/DeviceLogs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Terminal, Wrench } from 'lucide-react'
+import { ArrowLeft, Terminal, Wrench, MapPin } from 'lucide-react'
 
 const MOCK_DEVICE_STATUS = {
   device_id: 'plc-001',
@@ -52,6 +53,7 @@ export default function DeviceDetail() {
   const [error, setError] = useState(null)
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [showRepairModal, setShowRepairModal] = useState(false)
+  const [showSiteModal, setShowSiteModal] = useState(false)
 
   useEffect(() => { fetchDevice() }, [device_id])
 
@@ -126,6 +128,23 @@ export default function DeviceDetail() {
             <InfoRow label="Last Seen">
               <span className="text-foreground text-xs">{formatDate(device.last_seen)}</span>
             </InfoRow>
+            <div className="border-t pt-3 space-y-3">
+              <InfoRow label="Site">
+                <div className="flex items-center gap-2">
+                  {device.site_nickname
+                    ? <Link to={`/sites/${device.site_id}`} className="text-primary hover:underline text-sm flex items-center gap-1"><MapPin className="h-3 w-3" />{device.site_nickname}</Link>
+                    : <span className="text-muted-foreground text-sm">Not assigned</span>}
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setShowSiteModal(true)}>
+                    {device.site_id ? 'Change' : 'Assign'}
+                  </Button>
+                </div>
+              </InfoRow>
+              {device.organization_name && (
+                <InfoRow label="Organization">
+                  <span className="text-foreground">{device.organization_name}</span>
+                </InfoRow>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -219,6 +238,14 @@ export default function DeviceDetail() {
           error_code={device.last_error?.code}
           onClose={() => setShowRepairModal(false)}
           onSuccess={() => { setShowRepairModal(false); fetchDevice() }}
+        />
+      )}
+      {showSiteModal && (
+        <AssignSiteModal
+          device_id={device.device_id}
+          current_site_id={device.site_id}
+          onClose={() => setShowSiteModal(false)}
+          onSuccess={() => { setShowSiteModal(false); fetchDevice() }}
         />
       )}
     </div>

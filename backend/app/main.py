@@ -14,6 +14,8 @@ from app.routes.errors import router as errors_router
 from app.routes.health import router as health_router
 from app.routes.logs import router as logs_router
 from app.routes.metrics import router as metrics_router
+from app.routes.organizations import router as organizations_router
+from app.routes.sites import router as sites_router
 from app.services.influxdb_metrics import metrics_db
 from app.services.mqtt import mqtt_manager
 
@@ -32,6 +34,8 @@ app.include_router(errors_router)
 app.include_router(commands_router)
 app.include_router(logs_router)
 app.include_router(metrics_router)
+app.include_router(organizations_router)
+app.include_router(sites_router)
 app.include_router(debug_router)
 
 

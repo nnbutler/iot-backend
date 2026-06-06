@@ -4,6 +4,9 @@ import Header from './components/Header'
 import Login from './pages/Login'
 import DeviceList from './pages/DeviceList'
 import DeviceDetail from './pages/DeviceDetail'
+import OrganizationsPage from './pages/OrganizationsPage'
+import SitesPage from './pages/SitesPage'
+import SiteDetail from './pages/SiteDetail'
 
 function ProtectedRoute({ children }) {
   const { token } = useAuth()
@@ -20,6 +23,9 @@ function AppRoutes() {
         <Route path="/login" element={token ? <Navigate to="/devices" replace /> : <Login />} />
         <Route path="/devices" element={<ProtectedRoute><DeviceList /></ProtectedRoute>} />
         <Route path="/devices/:device_id" element={<ProtectedRoute><DeviceDetail /></ProtectedRoute>} />
+        <Route path="/organizations" element={<ProtectedRoute><OrganizationsPage /></ProtectedRoute>} />
+        <Route path="/sites" element={<ProtectedRoute><SitesPage /></ProtectedRoute>} />
+        <Route path="/sites/:site_id" element={<ProtectedRoute><SiteDetail /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/devices" replace />} />
       </Routes>
     </div>

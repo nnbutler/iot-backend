@@ -23,6 +23,7 @@ class Device(Base):
     last_error_timestamp = Column(DateTime)
     state = Column(String(100))
     firmware_version = Column(String(50))
+    site_id = Column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
