@@ -115,7 +115,15 @@ def record_outcome(
 
     # Update success rate on the specific repair action
     if body.repair_action_id:
-        action = db.query(RepairAction).filter(RepairAction.id == body.repair_action_id).first()
+        action = db.query(RepairAction).filter(
+            RepairAction.id == body.repair_action_id,
+            RepairAction.error_id == et.id,
+        ).first()
+        if not action:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Repair action {body.repair_action_id} not found for error '{error_code}'",
+            )
         if action:
             action.occurrences += 1
             if body.worked:

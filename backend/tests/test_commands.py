@@ -236,6 +236,31 @@ def test_update_command_result_not_found(client, device_api_headers):
     assert resp.status_code == 404
 
 
+def test_update_command_result_rejects_update_after_success(client, auth_headers, device_api_headers):
+    device_id, api_headers = device_api_headers
+    cmd_id = _send_command(client, auth_headers, device_id)
+    client.patch(f"/api/commands/{cmd_id}", headers=api_headers, json={"status": "success"})
+    resp = client.patch(f"/api/commands/{cmd_id}", headers=api_headers, json={"status": "failed"})
+    assert resp.status_code == 409
+
+
+def test_update_command_result_rejects_update_after_failed(client, auth_headers, device_api_headers):
+    device_id, api_headers = device_api_headers
+    cmd_id = _send_command(client, auth_headers, device_id)
+    client.patch(f"/api/commands/{cmd_id}", headers=api_headers, json={"status": "failed"})
+    resp = client.patch(f"/api/commands/{cmd_id}", headers=api_headers, json={"status": "success"})
+    assert resp.status_code == 409
+
+
+def test_update_command_result_allows_executing_before_terminal(client, auth_headers, device_api_headers):
+    device_id, api_headers = device_api_headers
+    cmd_id = _send_command(client, auth_headers, device_id)
+    resp = client.patch(f"/api/commands/{cmd_id}", headers=api_headers, json={"status": "executing"})
+    assert resp.status_code == 200
+    resp = client.patch(f"/api/commands/{cmd_id}", headers=api_headers, json={"status": "success"})
+    assert resp.status_code == 200
+
+
 def test_update_command_result_persists_in_history(client, auth_headers, device_api_headers):
     device_id, api_headers = device_api_headers
     cmd_id = _send_command(client, auth_headers, device_id)

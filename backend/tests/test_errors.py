@@ -274,3 +274,36 @@ def test_add_repair_action_missing_action_field_returns_422(client, auth_headers
     resp = client.post("/api/errors/sensor_disconnected/actions", headers=auth_headers,
                        json={"description": "No action field"})
     assert resp.status_code == 422
+
+
+def test_record_outcome_with_action_from_different_error_returns_404(client, auth_headers, registered_device):
+    """repair_action_id must belong to the specified error_code, not a different error type."""
+    device_id, _ = registered_device
+    # photoeye_misaligned has actions with id=4 and id=5 (seeded data)
+    # Submitting those against sensor_disconnected should be rejected
+    photoeye_actions = client.get("/api/errors/photoeye_misaligned", headers=auth_headers).json()["repair_actions"]
+    foreign_action_id = photoeye_actions[0]["id"]
+    resp = client.post("/api/errors/sensor_disconnected/outcomes", headers=auth_headers, json={
+        "device_id": device_id,
+        "repair_action_id": foreign_action_id,
+        "worked": True,
+    })
+    assert resp.status_code == 404
+
+
+def test_record_outcome_cross_error_action_does_not_corrupt_stats(client, auth_headers, registered_device):
+    """A rejected cross-error outcome must not modify any action's stats."""
+    device_id, _ = registered_device
+    photoeye_actions = client.get("/api/errors/photoeye_misaligned", headers=auth_headers).json()["repair_actions"]
+    foreign_action_id = photoeye_actions[0]["id"]
+    before = photoeye_actions[0]["occurrences"]
+
+    client.post("/api/errors/sensor_disconnected/outcomes", headers=auth_headers, json={
+        "device_id": device_id,
+        "repair_action_id": foreign_action_id,
+        "worked": True,
+    })
+
+    after_actions = client.get("/api/errors/photoeye_misaligned", headers=auth_headers).json()["repair_actions"]
+    after = next(a for a in after_actions if a["id"] == foreign_action_id)["occurrences"]
+    assert after == before

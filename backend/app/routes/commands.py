@@ -160,6 +160,11 @@ def update_command_result(
             detail="status must be one of: executing, success, failed",
         )
     command = db.query(Command).filter(Command.id == command_id).first()
+    if command.status in {"success", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Command already in terminal state '{command.status}' and cannot be updated",
+        )
     command.status = body.status
     if body.result is not None:
         command.result = body.result
