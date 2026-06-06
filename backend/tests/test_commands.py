@@ -147,6 +147,24 @@ def test_list_device_commands_limit_param(client, auth_headers, registered_devic
     assert len(commands) == 3
 
 
+def test_list_device_commands_limit_zero_returns_422(client, auth_headers, registered_device):
+    device_id, _ = registered_device
+    resp = client.get(f"/api/devices/{device_id}/commands?limit=0", headers=auth_headers)
+    assert resp.status_code == 422
+
+
+def test_list_device_commands_limit_above_max_returns_422(client, auth_headers, registered_device):
+    device_id, _ = registered_device
+    resp = client.get(f"/api/devices/{device_id}/commands?limit=201", headers=auth_headers)
+    assert resp.status_code == 422
+
+
+def test_list_device_commands_limit_at_bounds_accepted(client, auth_headers, registered_device):
+    device_id, _ = registered_device
+    assert client.get(f"/api/devices/{device_id}/commands?limit=1", headers=auth_headers).status_code == 200
+    assert client.get(f"/api/devices/{device_id}/commands?limit=200", headers=auth_headers).status_code == 200
+
+
 # ─── PATCH /api/commands/{command_id} ─────────────────────────────────────────
 
 

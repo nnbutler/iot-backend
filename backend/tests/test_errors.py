@@ -237,6 +237,15 @@ def test_add_repair_action_success(client, auth_headers):
     assert data["occurrences"] == 0
 
 
+def test_add_repair_action_first_step_on_empty_error_is_1(client, auth_headers):
+    # unknown_error has 0 seeded actions — first addition must get step=1
+    resp = client.post("/api/errors/unknown_error/actions", headers=auth_headers, json={
+        "action": "Check device logs",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["step"] == 1
+
+
 def test_add_repair_action_step_auto_increments(client, auth_headers):
     for i in range(3):
         resp = client.post("/api/errors/photoeye_misaligned/actions", headers=auth_headers, json={

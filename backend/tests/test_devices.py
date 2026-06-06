@@ -359,6 +359,16 @@ def test_compute_uptime_with_open_error():
     assert result > 90.0
 
 
+def test_compute_uptime_full_window_down_is_zero():
+    from app.routes.devices import _compute_uptime
+    now = datetime.now(timezone.utc)
+    error = Mock()
+    error.occurred_at = now - timedelta(days=35)  # started before the 30-day window
+    error.resolved_at = None  # still open
+    result = _compute_uptime("dev", [error])
+    assert result == 0.0
+
+
 # ── device status — site/org fields ──────────────────────────────────────────
 
 def test_device_status_includes_site_fields(client, auth_headers, registered_device):

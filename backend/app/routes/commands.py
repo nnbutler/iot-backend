@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -106,7 +106,7 @@ def send_command(
 @router.get("/api/devices/{device_id}/commands")
 def list_device_commands(
     device_id: str,
-    limit: int = 20,
+    limit: int = Query(20, ge=1, le=200, description="Number of commands to return (1–200)"),
     db: Session = Depends(get_db),
     _: str = Depends(get_current_user),
 ) -> dict:
