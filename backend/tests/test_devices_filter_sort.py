@@ -257,12 +257,10 @@ def test_all_filters_combined(client, auth_headers, test_devices):
 # ─── Invalid Parameters Tests ────────────────────────────────────────────────
 
 
-def test_invalid_sort_field_uses_default(client, auth_headers, test_devices):
-    """Test invalid sort field falls back gracefully."""
-    # Should use default device_id sort
+def test_invalid_sort_field_returns_422(client, auth_headers, test_devices):
+    """Invalid sort_by field is rejected with 422 (allowlist enforced)."""
     resp = client.get("/api/devices?sort_by=invalid_field", headers=auth_headers)
-    # May return error or default - check what happens
-    assert resp.status_code in (200, 400)
+    assert resp.status_code == 422
 
 
 def test_invalid_sort_order_uses_default(client, auth_headers, test_devices):

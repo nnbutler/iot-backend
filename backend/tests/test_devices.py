@@ -2,6 +2,7 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
+from app.models.device import Device, DeviceErrorHistory
 
 
 # ─── GET /api/devices ─────────────────────────────────────────────────────────
@@ -398,3 +399,90 @@ def test_heartbeat_clears_online_since_when_offline(client, auth_headers, device
     client.patch(f"/api/devices/{device_id}/heartbeat", json={"online": False}, headers=api_headers)
     status = client.get(f"/api/devices/{device_id}/status", headers=auth_headers).json()
     assert status["online_since"] is None
+
+
+# ── Bug: sort_by=uptime_percent silently sorts by device_id ───────────────────
+
+def test_sort_by_uptime_percent_orders_by_computed_uptime(client, auth_headers, db_session):
+    """sort_by=uptime_percent must sort by uptime, not fall back to device_id.
+
+    'aaa-uptest' has no errors (100% uptime).
+    'zzz-uptest' has a 24-hour open error (~96.7% uptime).
+    Alphabetical order puts aaa first; correct uptime ASC puts zzz first.
+    The bug: getattr(Device, 'uptime_percent', Device.device_id) returns Device.device_id
+    because uptime_percent is not a model column, so the sort silently does nothing.
+    """
+    now = datetime.now(timezone.utc)
+    db_session.add(Device(device_id="aaa-uptest", api_key="k-aaa"))
+    db_session.add(Device(device_id="zzz-uptest", api_key="k-zzz"))
+    db_session.commit()
+    db_session.add(DeviceErrorHistory(
+        device_id="zzz-uptest",
+        occurred_at=now - timedelta(hours=24),
+        resolved_at=None,
+    ))
+    db_session.commit()
+
+    resp = client.get("/api/devices?sort_by=uptime_percent&sort_order=asc", headers=auth_headers)
+    assert resp.status_code == 200
+    devices = resp.json()["devices"]
+    relevant = [d for d in devices if d["device_id"] in {"aaa-uptest", "zzz-uptest"}]
+    assert len(relevant) == 2
+    # zzz-uptest has the lower uptime and must appear first in ascending order
+    assert relevant[0]["device_id"] == "zzz-uptest", (
+        f"Expected zzz-uptest (lower uptime) first, got {relevant[0]['device_id']}. "
+        "sort_by=uptime_percent is likely falling back to device_id sort."
+    )
+
+
+# ── Bug: sort_by with a non-column attribute crashes with 500 ─────────────────
+
+def test_sort_by_invalid_field_rejected_not_500(client, auth_headers):
+    """sort_by values that aren't valid Device columns must be rejected (4xx), not crash (500).
+
+    getattr(Device, '__tablename__') returns the string 'devices'.
+    query.order_by('devices'.desc()) raises AttributeError → unhandled 500.
+    The fix is an allowlist; the test expects a 422.
+    """
+    resp = client.get("/api/devices?sort_by=__tablename__&sort_order=desc", headers=auth_headers)
+    assert resp.status_code == 422, (
+        f"Expected 422 for invalid sort_by, got {resp.status_code}. "
+        "sort_by has no allowlist — non-column attributes can crash the server."
+    )
+
+
+def test_sort_by_unknown_name_rejected_not_silently_ignored(client, auth_headers):
+    """A misspelled sort_by like 'lastseen' should be a 422, not silently sort by device_id."""
+    resp = client.get("/api/devices?sort_by=lastseen", headers=auth_headers)
+    assert resp.status_code == 422
+
+
+# ── Bug: _compute_uptime double-counts overlapping error intervals ─────────────
+
+def test_compute_uptime_overlapping_errors_not_double_counted():
+    """Overlapping error windows must be merged before summing downtime.
+
+    Error 1: T-2h → T-30min  (90 min of downtime)
+    Error 2: T-90min → T-30min  (60 min, fully inside Error 1's window)
+    Real downtime: 90 min (the union of both intervals).
+    Naive sum: 150 min → understates uptime by 60 min.
+    Correct uptime over 30 days: ~99.8%.  Buggy result: ~99.7%.
+    """
+    from app.routes.devices import _compute_uptime
+    now = datetime.now(timezone.utc)
+
+    e1 = Mock()
+    e1.occurred_at = now - timedelta(hours=2)
+    e1.resolved_at = now - timedelta(minutes=30)
+
+    e2 = Mock()
+    e2.occurred_at = now - timedelta(minutes=90)  # starts inside e1
+    e2.resolved_at = now - timedelta(minutes=30)   # same end
+
+    result = _compute_uptime("dev", [e1, e2])
+    # Correct: 90 min downtime / 30-day window → 99.79% → rounds to 99.8
+    # Bug returns: 150 min / 30-day window → 99.65% → rounds to 99.7
+    assert result == pytest.approx(99.8, abs=0.05), (
+        f"Got {result}. Overlapping errors are being double-counted "
+        "(naive sum instead of merging intervals)."
+    )

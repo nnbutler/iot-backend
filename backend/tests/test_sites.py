@@ -158,6 +158,32 @@ def test_update_site_invalid_org_returns_404(client, auth_headers, site):
     assert resp.status_code == 404
 
 
+def test_update_site_preserves_geo_when_omitted(client, auth_headers, site, org, db_session):
+    """PATCH without lat/lon/timezone must not wipe previously geocoded coordinates.
+
+    SiteBody defaults latitude/longitude/timezone to None. The current handler
+    blindly assigns body.latitude → site.latitude, so a PATCH that omits geo fields
+    silently destroys geocoded data. The fix is to skip None geo fields on update.
+    """
+    site.latitude = 33.4484
+    site.longitude = -112.0740
+    site.timezone = "America/Phoenix"
+    db_session.commit()
+
+    resp = client.patch(f"/api/sites/{site.id}", json={
+        "organization_id": org.id,
+        "nickname": "Renamed Without Geo",
+        "address": site.address,
+    }, headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["latitude"] == pytest.approx(33.4484), (
+        "latitude was wiped by PATCH — SiteBody defaults to None and handler assigns unconditionally"
+    )
+    assert data["longitude"] == pytest.approx(-112.0740)
+    assert data["timezone"] == "America/Phoenix"
+
+
 # ── Delete ────────────────────────────────────────────────────────────────────
 
 def test_delete_site(client, auth_headers, site):

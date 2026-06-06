@@ -130,9 +130,13 @@ def update_site(
     site.contact_phone = body.contact_phone
     site.contact_email = body.contact_email
     site.operating_hours = body.operating_hours
-    site.latitude = body.latitude
-    site.longitude = body.longitude
-    site.timezone = body.timezone
+    # Only overwrite geo fields when explicitly provided; omitting them preserves existing geocoded data
+    if "latitude" in body.model_fields_set:
+        site.latitude = body.latitude
+    if "longitude" in body.model_fields_set:
+        site.longitude = body.longitude
+    if "timezone" in body.model_fields_set:
+        site.timezone = body.timezone
     db.commit()
     return _site_dict(site, org.name)
 

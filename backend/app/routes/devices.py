@@ -18,6 +18,17 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 UPTIME_WINDOW_DAYS = 30
 
+# Maps sort_by name → Device column name, or None for Python-side sorts
+VALID_SORT_FIELDS: dict[str, Optional[str]] = {
+    "device_id": "device_id",
+    "customer_name": "customer_name",
+    "location": "location",
+    "online": "online",
+    "last_error": "last_error",
+    "last_seen": "last_seen",
+    "uptime_percent": None,  # computed in Python after DB fetch
+}
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,12 +52,24 @@ def _compute_uptime(device_id: str, errors: list) -> float:
     window_start = now - timedelta(days=UPTIME_WINDOW_DAYS)
     window_seconds = UPTIME_WINDOW_DAYS * 24 * 3600
 
-    error_seconds = 0.0
+    # Clamp each error to the window boundary
+    intervals = []
     for e in errors:
         start = max(_as_utc(e.occurred_at), window_start)
         end = _as_utc(e.resolved_at) if e.resolved_at else now
-        error_seconds += max(0.0, (end - start).total_seconds())
+        if end > start:
+            intervals.append((start, end))
 
+    # Merge overlapping intervals so concurrent errors aren't double-counted
+    intervals.sort(key=lambda x: x[0])
+    merged: list[list] = []
+    for start, end in intervals:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+
+    error_seconds = sum((e - s).total_seconds() for s, e in merged)
     return round(100.0 * (1 - error_seconds / window_seconds), 1)
 
 
@@ -99,10 +122,16 @@ def list_devices(
     customer: Optional[str] = Query(None, description="Filter by customer name"),
     has_error: Optional[bool] = Query(None, description="Filter by error presence"),
     # Sorting
-    sort_by: str = Query("device_id", description="Sort field: device_id, customer_name, location, online, last_error, last_seen, uptime_percent"),
+    sort_by: str = Query("device_id", description=f"Sort field: {', '.join(sorted(VALID_SORT_FIELDS))}"),
     sort_order: str = Query("asc", description="Sort order: asc or desc"),
 ) -> dict:
     """List devices with filtering and sorting."""
+    if sort_by not in VALID_SORT_FIELDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid sort_by '{sort_by}'. Valid fields: {sorted(VALID_SORT_FIELDS)}",
+        )
+
     query = db.query(Device)
 
     # Apply filters
@@ -128,12 +157,14 @@ def list_devices(
         else:
             query = query.filter(Device.last_error.is_(None))
 
-    # Apply sorting
-    sort_field = getattr(Device, sort_by, Device.device_id)
-    if sort_order.lower() == "desc":
-        query = query.order_by(sort_field.desc())
-    else:
-        query = query.order_by(sort_field)
+    # Apply DB-level sorting for column-based fields; uptime_percent is sorted in Python below
+    db_sort_column = VALID_SORT_FIELDS[sort_by]
+    if db_sort_column is not None:
+        sort_field = getattr(Device, db_sort_column)
+        if sort_order.lower() == "desc":
+            query = query.order_by(sort_field.desc())
+        else:
+            query = query.order_by(sort_field)
 
     devices = query.all()
 
@@ -169,25 +200,28 @@ def list_devices(
         orgs_map = {o.id: o for o in orgs}
         sites_map = {s.id: (s, orgs_map.get(s.organization_id)) for s in sites}
 
-    return {
-        "devices": [
-            {
-                "device_id": d.device_id,
-                "customer_name": d.customer_name,
-                "location": d.location,
-                "online": d.online,
-                "online_since": _as_utc(d.online_since).isoformat() if d.online_since else None,
-                "last_seen": _as_utc(d.last_seen).isoformat() if d.last_seen else None,
-                "last_error": d.last_error,
-                "uptime_percent": _compute_uptime(d.device_id, errors_by_device.get(d.device_id, [])),
-                "site_id": d.site_id,
-                "site_nickname": sites_map[d.site_id][0].nickname if d.site_id and d.site_id in sites_map else None,
-                "organization_id": sites_map[d.site_id][1].id if d.site_id and d.site_id in sites_map and sites_map[d.site_id][1] else None,
-                "organization_name": sites_map[d.site_id][1].name if d.site_id and d.site_id in sites_map and sites_map[d.site_id][1] else None,
-            }
-            for d in devices
-        ]
-    }
+    device_list = [
+        {
+            "device_id": d.device_id,
+            "customer_name": d.customer_name,
+            "location": d.location,
+            "online": d.online,
+            "online_since": _as_utc(d.online_since).isoformat() if d.online_since else None,
+            "last_seen": _as_utc(d.last_seen).isoformat() if d.last_seen else None,
+            "last_error": d.last_error,
+            "uptime_percent": _compute_uptime(d.device_id, errors_by_device.get(d.device_id, [])),
+            "site_id": d.site_id,
+            "site_nickname": sites_map[d.site_id][0].nickname if d.site_id and d.site_id in sites_map else None,
+            "organization_id": sites_map[d.site_id][1].id if d.site_id and d.site_id in sites_map and sites_map[d.site_id][1] else None,
+            "organization_name": sites_map[d.site_id][1].name if d.site_id and d.site_id in sites_map and sites_map[d.site_id][1] else None,
+        }
+        for d in devices
+    ]
+
+    if sort_by == "uptime_percent":
+        device_list.sort(key=lambda d: d["uptime_percent"], reverse=(sort_order.lower() == "desc"))
+
+    return {"devices": device_list}
 
 
 @router.get("/{device_id}/status")
