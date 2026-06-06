@@ -1,5 +1,7 @@
 """Tests for device registration, status, and heartbeat endpoints."""
 import pytest
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 
 
 # ─── GET /api/devices ─────────────────────────────────────────────────────────
@@ -303,3 +305,96 @@ def test_heartbeat_uptime_starts_at_100(client, auth_headers, device_api_headers
     devices = client.get("/api/devices", headers=auth_headers).json()["devices"]
     device = next(d for d in devices if d["device_id"] == device_id)
     assert device["uptime_percent"] == 100.0
+
+
+# ── _as_utc helper ────────────────────────────────────────────────────────────
+
+def test_as_utc_returns_none_for_none():
+    from app.routes.devices import _as_utc
+    assert _as_utc(None) is None
+
+
+def test_as_utc_adds_utc_to_naive():
+    from app.routes.devices import _as_utc
+    naive = datetime(2025, 6, 5, 12, 0, 0)
+    result = _as_utc(naive)
+    assert result.tzinfo is not None
+    assert result == datetime(2025, 6, 5, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def test_as_utc_preserves_aware():
+    from app.routes.devices import _as_utc
+    aware = datetime(2025, 6, 5, 12, 0, 0, tzinfo=timezone.utc)
+    assert _as_utc(aware) is aware
+
+
+# ── _compute_uptime helper ────────────────────────────────────────────────────
+
+def test_compute_uptime_no_errors_is_100():
+    from app.routes.devices import _compute_uptime
+    assert _compute_uptime("dev", []) == 100.0
+
+
+def test_compute_uptime_with_resolved_error():
+    from app.routes.devices import _compute_uptime
+    now = datetime.now(timezone.utc)
+    error = Mock()
+    error.occurred_at = now - timedelta(hours=1)
+    error.resolved_at = now - timedelta(minutes=30)
+    result = _compute_uptime("dev", [error])
+    # 30-minute error over 30-day window → very close to 100%
+    assert 99.9 <= result < 100.0
+
+
+def test_compute_uptime_with_open_error():
+    from app.routes.devices import _compute_uptime
+    now = datetime.now(timezone.utc)
+    error = Mock()
+    error.occurred_at = now - timedelta(hours=24)
+    error.resolved_at = None  # still open
+    result = _compute_uptime("dev", [error])
+    # 24-hour error over 30 days → ~96.7%
+    assert result < 100.0
+    assert result > 90.0
+
+
+# ── device status — site/org fields ──────────────────────────────────────────
+
+def test_device_status_includes_site_fields(client, auth_headers, registered_device):
+    device_id, _ = registered_device
+    resp = client.get(f"/api/devices/{device_id}/status", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "site_id" in data
+    assert "site_nickname" in data
+    assert "organization_id" in data
+    assert "organization_name" in data
+    assert data["site_id"] is None
+
+
+def test_list_devices_includes_site_fields(client, auth_headers, registered_device):
+    resp = client.get("/api/devices", headers=auth_headers)
+    device_id, _ = registered_device
+    devices = resp.json()["devices"]
+    device = next(d for d in devices if d["device_id"] == device_id)
+    assert "site_id" in device
+    assert "site_nickname" in device
+    assert "organization_name" in device
+
+
+# ── heartbeat online_since tracking ──────────────────────────────────────────
+
+def test_heartbeat_sets_online_since_on_first_online(client, auth_headers, device_api_headers):
+    device_id, api_headers = device_api_headers
+    client.patch(f"/api/devices/{device_id}/heartbeat",
+                 json={"online": True}, headers=api_headers)
+    status = client.get(f"/api/devices/{device_id}/status", headers=auth_headers).json()
+    assert status["online_since"] is not None
+
+
+def test_heartbeat_clears_online_since_when_offline(client, auth_headers, device_api_headers):
+    device_id, api_headers = device_api_headers
+    client.patch(f"/api/devices/{device_id}/heartbeat", json={"online": True}, headers=api_headers)
+    client.patch(f"/api/devices/{device_id}/heartbeat", json={"online": False}, headers=api_headers)
+    status = client.get(f"/api/devices/{device_id}/status", headers=auth_headers).json()
+    assert status["online_since"] is None

@@ -317,3 +317,25 @@ def test_comments_require_auth(client, site):
 def test_comments_site_not_found(client, auth_headers):
     assert client.get("/api/sites/99999/comments", headers=auth_headers).status_code == 404
     assert client.post("/api/sites/99999/comments", json={"body": "x"}, headers=auth_headers).status_code == 404
+
+
+def test_geocode_service_unavailable_returns_502(client, auth_headers, site):
+    with patch("app.routes.sites.httpx.AsyncClient") as mock_client_cls:
+        mock_async_client = AsyncMock()
+        mock_async_client.__aenter__ = AsyncMock(return_value=mock_async_client)
+        mock_async_client.__aexit__ = AsyncMock(return_value=None)
+        mock_async_client.get = AsyncMock(side_effect=Exception("connection refused"))
+        mock_client_cls.return_value = mock_async_client
+        resp = client.post(f"/api/sites/{site.id}/geocode", headers=auth_headers)
+    assert resp.status_code == 502
+
+
+def test_unassign_device_not_on_this_site_returns_404(client, auth_headers, site, db_session):
+    other_site = Site(organization_id=site.organization_id, nickname="Other")
+    db_session.add(other_site)
+    device = Device(device_id="wrong-site-device", api_key="wkey", site_id=other_site.id)
+    db_session.add(device)
+    db_session.commit()
+    # Try to unassign from a site the device doesn't belong to
+    resp = client.delete(f"/api/sites/{site.id}/devices/wrong-site-device", headers=auth_headers)
+    assert resp.status_code == 404
