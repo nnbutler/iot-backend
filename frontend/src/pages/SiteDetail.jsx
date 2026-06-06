@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import client from '../api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, MapPin, LocateFixed, Trash2, Send } from 'lucide-react'
 import ErrorMessage from '../components/ErrorMessage'
+import { formatDate } from '../utils/formatting'
 
 export default function SiteDetail() {
   const { site_id } = useParams()
@@ -16,9 +17,16 @@ export default function SiteDetail() {
   const [orgs, setOrgs] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [geocoding, setGeocoding] = useState(false)
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(false)
   const [form, setForm] = useState(null)
+
+  const [comments, setComments] = useState([])
+  const [commentsLoading, setCommentsLoading] = useState(true)
+  const [newComment, setNewComment] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const commentRef = useRef(null)
 
   const load = async () => {
     try {
@@ -36,6 +44,9 @@ export default function SiteDetail() {
         contact_phone: siteRes.data.contact_phone || '',
         contact_email: siteRes.data.contact_email || '',
         operating_hours: siteRes.data.operating_hours || '',
+        latitude: siteRes.data.latitude ?? '',
+        longitude: siteRes.data.longitude ?? '',
+        timezone: siteRes.data.timezone || '',
       })
     } catch {
       setError('Failed to load site')
@@ -44,7 +55,21 @@ export default function SiteDetail() {
     }
   }
 
-  useEffect(() => { load() }, [site_id])
+  const loadComments = async () => {
+    try {
+      const res = await client.get(`/sites/${site_id}/comments`)
+      setComments(res.data.comments)
+    } catch {
+      // non-fatal
+    } finally {
+      setCommentsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    loadComments()
+  }, [site_id])
 
   const save = async () => {
     setSaving(true)
@@ -53,6 +78,9 @@ export default function SiteDetail() {
       const res = await client.patch(`/sites/${site_id}`, {
         ...form,
         organization_id: Number(form.organization_id),
+        latitude: form.latitude !== '' ? Number(form.latitude) : null,
+        longitude: form.longitude !== '' ? Number(form.longitude) : null,
+        timezone: form.timezone || null,
       })
       setSite(res.data)
       setSaved(true)
@@ -64,22 +92,54 @@ export default function SiteDetail() {
     }
   }
 
+  const geocode = async () => {
+    setGeocoding(true)
+    setError(null)
+    try {
+      const res = await client.post(`/sites/${site_id}/geocode`)
+      setForm(f => ({
+        ...f,
+        latitude: res.data.latitude,
+        longitude: res.data.longitude,
+        timezone: res.data.timezone,
+      }))
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Geocoding failed')
+    } finally {
+      setGeocoding(false)
+    }
+  }
+
+  const submitComment = async () => {
+    if (!newComment.trim()) return
+    setSubmittingComment(true)
+    try {
+      const res = await client.post(`/sites/${site_id}/comments`, { body: newComment.trim() })
+      setComments(prev => [res.data, ...prev])
+      setNewComment('')
+    } catch {
+      setError('Failed to post comment')
+    } finally {
+      setSubmittingComment(false)
+    }
+  }
+
+  const deleteComment = async (commentId) => {
+    try {
+      await client.delete(`/sites/${site_id}/comments/${commentId}`)
+      setComments(prev => prev.filter(c => c.id !== commentId))
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to delete comment')
+    }
+  }
+
   const field = (key) => ({
     value: form?.[key] ?? '',
     onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),
   })
 
-  if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-8 text-muted-foreground">Loading...</div>
-  }
-
-  if (!site) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <ErrorMessage message="Site not found" />
-      </div>
-    )
-  }
+  if (loading) return <div className="max-w-3xl mx-auto px-4 py-8 text-muted-foreground">Loading...</div>
+  if (!site) return <div className="max-w-3xl mx-auto px-4 py-8"><ErrorMessage message="Site not found" /></div>
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
@@ -93,6 +153,7 @@ export default function SiteDetail() {
 
       {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
+      {/* Site Details */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Site Details</CardTitle>
@@ -146,6 +207,37 @@ export default function SiteDetail() {
             </div>
           </div>
 
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Location</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                onClick={geocode}
+                disabled={geocoding || !form.address}
+                title={!form.address ? 'Enter an address first' : 'Detect from address'}
+              >
+                <LocateFixed className="h-3.5 w-3.5" />
+                {geocoding ? 'Detecting…' : 'Auto-detect from address'}
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Latitude</label>
+                <Input {...field('latitude')} placeholder="33.4484" type="number" step="any" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Longitude</label>
+                <Input {...field('longitude')} placeholder="-112.0740" type="number" step="any" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Timezone</label>
+                <Input {...field('timezone')} placeholder="America/Phoenix" />
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 pt-2">
             <Button onClick={save} disabled={saving}>
               <Save className="h-4 w-4" />{saving ? 'Saving…' : 'Save Changes'}
@@ -155,6 +247,7 @@ export default function SiteDetail() {
         </CardContent>
       </Card>
 
+      {/* Devices */}
       {site.devices && site.devices.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -192,6 +285,57 @@ export default function SiteDetail() {
           </Table>
         </Card>
       )}
+
+      {/* Comments */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Notes & Comments</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              ref={commentRef}
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              placeholder="Add a note about this site…"
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && submitComment()}
+            />
+            <Button onClick={submitComment} disabled={submittingComment || !newComment.trim()} size="sm">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {commentsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading comments…</p>
+          ) : comments.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No notes yet</p>
+          ) : (
+            <div className="space-y-3">
+              {comments.map(c => (
+                <div key={c.id} className="flex gap-3 group">
+                  <div className="flex-shrink-0 h-7 w-7 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+                    {c.username[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs font-semibold">{c.username}</span>
+                      <span className="text-xs text-muted-foreground">{formatDate(c.created_at)}</span>
+                    </div>
+                    <p className="text-sm mt-0.5 whitespace-pre-wrap break-words">{c.body}</p>
+                  </div>
+                  <button
+                    onClick={() => deleteComment(c.id)}
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity flex-shrink-0 mt-0.5"
+                    title="Delete comment"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

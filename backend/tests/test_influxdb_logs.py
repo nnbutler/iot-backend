@@ -49,7 +49,7 @@ class TestGetLogs:
         mock_table.records = [mock_record1, mock_record2]
         metrics_db.query_api.query.return_value = [mock_table]
 
-        result = metrics_db.get_logs("device-001", level="ERROR", limit=50)
+        result = metrics_db.get_logs("device-001", levels=["ERROR"], limit=50)
 
         assert len(result["logs"]) == 2
         assert result["logs"][0]["level"] == "ERROR"
@@ -64,10 +64,11 @@ class TestGetLogs:
         metrics_db.query_api = Mock()
         metrics_db.query_api.query.return_value = [[]]
 
-        metrics_db.get_logs("device-001", level="ERROR", limit=50)
+        metrics_db.get_logs("device-001", levels=["ERROR"], limit=50)
 
         query = metrics_db.query_api.query.call_args.kwargs["query"]
-        assert 'r.level == "ERROR"' in query
+        assert '"ERROR"' in query
+        assert 'contains' in query
 
     def test_get_logs_without_level_filter(self):
         """Test query when no level filter is specified."""
@@ -76,10 +77,10 @@ class TestGetLogs:
         metrics_db.query_api = Mock()
         metrics_db.query_api.query.return_value = [[]]
 
-        metrics_db.get_logs("device-001", level=None, limit=50)
+        metrics_db.get_logs("device-001", levels=None, limit=50)
 
         query = metrics_db.query_api.query.call_args.kwargs["query"]
-        assert 'r.level ==' not in query
+        assert 'contains' not in query
 
     def test_get_logs_with_timestamp_cursor(self):
         """Test pagination with before_timestamp cursor."""
@@ -177,7 +178,7 @@ class TestGetLogs:
         metrics_db.query_api = Mock()
         metrics_db.query_api.query.return_value = [[]]
 
-        metrics_db.get_logs('device"123', level=None, limit=50)
+        metrics_db.get_logs('device"123', levels=None, limit=50)
 
         query = metrics_db.query_api.query.call_args.kwargs["query"]
         assert 'device\\"123' in query

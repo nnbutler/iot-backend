@@ -14,6 +14,18 @@ router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 
 class OrgBody(BaseModel):
     name: str
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+
+
+def _org_dict(o: Organization) -> dict:
+    return {
+        "id": o.id,
+        "name": o.name,
+        "logo_url": o.logo_url,
+        "website": o.website,
+        "created_at": o.created_at.isoformat(),
+    }
 
 
 @router.get("")
@@ -22,12 +34,7 @@ def list_organizations(
     _: str = Depends(get_current_user),
 ) -> dict:
     orgs = db.query(Organization).order_by(Organization.name).all()
-    return {
-        "organizations": [
-            {"id": o.id, "name": o.name, "created_at": o.created_at.isoformat()}
-            for o in orgs
-        ]
-    }
+    return {"organizations": [_org_dict(o) for o in orgs]}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -39,11 +46,11 @@ def create_organization(
     existing = db.query(Organization).filter(Organization.name == body.name).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Organization name already exists")
-    org = Organization(name=body.name)
+    org = Organization(name=body.name, logo_url=body.logo_url, website=body.website)
     db.add(org)
     db.commit()
     db.refresh(org)
-    return {"id": org.id, "name": org.name, "created_at": org.created_at.isoformat()}
+    return _org_dict(org)
 
 
 @router.get("/{org_id}")
@@ -55,7 +62,7 @@ def get_organization(
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
-    return {"id": org.id, "name": org.name, "created_at": org.created_at.isoformat()}
+    return _org_dict(org)
 
 
 @router.patch("/{org_id}")
@@ -72,8 +79,10 @@ def update_organization(
     if conflict:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Organization name already exists")
     org.name = body.name
+    org.logo_url = body.logo_url
+    org.website = body.website
     db.commit()
-    return {"id": org.id, "name": org.name, "created_at": org.created_at.isoformat()}
+    return _org_dict(org)
 
 
 @router.delete("/{org_id}", status_code=status.HTTP_204_NO_CONTENT)

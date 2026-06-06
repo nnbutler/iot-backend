@@ -80,8 +80,11 @@ def test_register_device_stores_all_fields(client, auth_headers):
 
 
 def test_register_device_duplicate_returns_409(client):
+    from unittest.mock import patch
     client.post("/api/devices/register", json={"device_id": "plc-dup"})
-    resp = client.post("/api/devices/register", json={"device_id": "plc-dup"})
+    with patch("app.config.settings") as mock_settings:
+        mock_settings.DEBUG = False
+        resp = client.post("/api/devices/register", json={"device_id": "plc-dup"})
     assert resp.status_code == 409
     assert "already registered" in resp.json()["detail"]
 

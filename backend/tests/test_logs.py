@@ -48,7 +48,7 @@ def test_list_logs_returns_all(mock_metrics_db, client, auth_headers, device):
     data = resp.json()
     assert len(data["logs"]) == 6
     assert data["device_id"] == "log-test-device"
-    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", None, 50, None)
+    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", None, 50, None, None, None)
 
 
 @patch("app.routes.logs.metrics_db")
@@ -110,7 +110,7 @@ def test_filter_by_error(mock_metrics_db, client, auth_headers, device):
     logs = resp.json()["logs"]
     assert len(logs) == 1
     assert logs[0]["level"] == "ERROR"
-    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", "ERROR", 50, None)
+    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", ["ERROR"], 50, None, None, None)
 
 
 @patch("app.routes.logs.metrics_db")
@@ -192,7 +192,7 @@ def test_filter_level_case_insensitive(mock_metrics_db, client, auth_headers, de
     assert resp.status_code == 200
     logs = resp.json()["logs"]
     assert len(logs) == 1
-    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", "ERROR", 50, None)
+    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", ["ERROR"], 50, None, None, None)
 
 
 def test_filter_invalid_level_returns_422(client, auth_headers, device):
@@ -231,7 +231,7 @@ def test_limit_parameter(mock_metrics_db, client, auth_headers, device):
     assert len(data["logs"]) == 3
     assert data["has_more"] is True
     assert data["next_before_timestamp"] is not None
-    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", None, 3, None)
+    mock_metrics_db.get_logs.assert_called_once_with("log-test-device", None, 3, None, None, None)
 
 
 @patch("app.routes.logs.metrics_db")
