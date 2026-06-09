@@ -31,6 +31,9 @@ nginx/certs/
 # Node
 node_modules/
 
+# Backups
+backups/
+
 # IDE
 .vscode/
 .idea/
