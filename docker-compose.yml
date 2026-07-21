@@ -101,11 +101,49 @@ services:
       - "8080:80"      # HTTP (redirects to HTTPS)
       - "8443:443"     # HTTPS (dev: self-signed; prod: Let's Encrypt)
     volumes:
-      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/certs:/etc/nginx/certs
       - ./certbot_data:/var/www/certbot:ro
     depends_on:
       - backend
       - frontend
+    restart: unless-stopped
+
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local
+    container_name: iot-postgres-backup
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${DB_NAME:-device_manager}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      SCHEDULE: "0 2 * * *"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - ./backups/postgres:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  influxdb-backup:
+    image: influxdb:2.7-alpine
+    container_name: iot-influxdb-backup
+    environment:
+      INFLUXDB_TOKEN: device-manager-token
+      BACKUP_KEEP_DAYS: 7
+    volumes:
+      - ./backups/influxdb:/backups
+      - ./scripts/influx-backup.sh:/influx-backup.sh:ro
+    entrypoint: >
+      /bin/sh -c "
+        echo '0 2 * * * /bin/sh /influx-backup.sh >> /var/log/influx-backup.log 2>&1' | crontab - &&
+        crond -f -l 8
+      "
+    depends_on:
+      influxdb:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
